@@ -38,5 +38,6 @@ install:
 local:
 	go build -o $(BIN_DIR)/$(BINARY) $(CMD_DIR)
 	cp $(BIN_DIR)/$(BINARY) ~/Library/Application\ Support/Code/User/globalStorage/evsyukov.hledger/$(BINARY)
+	cp -f $(BIN_DIR)/$(BINARY) ~/go/bin/$(BINARY)
 
 all: lint test build
