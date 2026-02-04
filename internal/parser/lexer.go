@@ -14,6 +14,10 @@ type Lexer struct {
 	atStart       bool
 	afterIndent   bool
 	inTransaction bool
+	inDirective   bool
+	onPostingLine bool
+	afterSign     bool
+	afterNumber   bool
 }
 
 func NewLexer(input string) *Lexer {
@@ -25,6 +29,10 @@ func NewLexer(input string) *Lexer {
 		atStart:       true,
 		afterIndent:   false,
 		inTransaction: false,
+		inDirective:   false,
+		onPostingLine: false,
+		afterSign:     false,
+		afterNumber:   false,
 	}
 }
 
@@ -116,10 +124,37 @@ func (l *Lexer) scanInLine() Token {
 		}
 		return l.scanNumber()
 	case l.isAccountStart(ch) || l.isAccountStartRune(r):
-		if l.looksLikeAccount() {
-			return l.scanAccount()
+		// afterIndent = true → subdirective line or posting line
+		if l.afterIndent {
+			if l.inDirective {
+				return l.scanSubdirectiveContent() // Subdirective line
+			}
+			return l.scanAccount() // Posting line
 		}
-		return l.scanCommodityOrText()
+		// After sign or number → Commodity (amount context)
+		if l.afterSign || l.afterNumber {
+			return l.scanCommodityOrText()
+		}
+		// Posting line after account → Commodity (even if not in transaction)
+		if l.onPostingLine {
+			return l.scanCommodityOrText()
+		}
+		// In directive context → check if it's an account, otherwise single-word argument
+		if l.inDirective {
+			if l.looksLikeAccount() {
+				return l.scanAccount() // Account name in directive (e.g., "account expenses:food")
+			}
+			return l.scanDirectiveArg() // Directive arguments (e.g., "EUR" in "P 2024-01-15 EUR $1.08")
+		}
+		// Not in transaction and not on posting line → could be account (directive line) or text
+		if !l.inTransaction {
+			if l.looksLikeAccount() {
+				return l.scanAccount()
+			}
+			return l.scanText()
+		}
+		// Header line → Text
+		return l.scanText()
 	default:
 		return l.scanText()
 	}
@@ -139,7 +174,10 @@ func (l *Lexer) scanDate() Token {
 	}
 
 	value := l.input[start:l.pos]
-	l.inTransaction = true
+	// Only set inTransaction if date is at column 1 (transaction header, not directive)
+	if startPos.Column == 1 {
+		l.inTransaction = true
+	}
 	return Token{Type: TokenDate, Value: value, Pos: startPos, End: l.position()}
 }
 
@@ -189,9 +227,10 @@ func (l *Lexer) scanIndent() Token {
 	}
 
 	value := l.input[start:l.pos]
-	// Only set afterIndent if we're in a transaction context (after seeing a date)
-	if l.inTransaction {
-		l.afterIndent = true
+	// Indent indicates start of posting line (account + amount) or subdirective
+	l.afterIndent = true
+	if !l.inDirective {
+		l.onPostingLine = true // Only for transactions
 	}
 	return Token{Type: TokenIndent, Value: value, Pos: startPos, End: l.position()}
 }
@@ -203,9 +242,11 @@ func (l *Lexer) scanNewline() Token {
 	l.column = 1
 	l.atStart = true
 	l.afterIndent = false
-	// Check if next line starts at column 1 (not indented) - this ends the transaction
+	l.onPostingLine = false
+	// Check if next line starts at column 1 (not indented) - this ends the transaction or directive
 	if l.pos < len(l.input) && !l.isWhitespace(l.peek()) {
 		l.inTransaction = false
+		l.inDirective = false // Reset if no indent follows
 	}
 	return Token{Type: TokenNewline, Value: "\n", Pos: startPos, End: l.position()}
 }
@@ -295,6 +336,7 @@ func (l *Lexer) scanNumber() Token {
 done:
 
 	value := l.input[start:l.pos]
+	l.afterNumber = true // Mark that we just scanned a number (amount context continues)
 	return Token{Type: TokenNumber, Value: value, Pos: startPos, End: l.position()}
 }
 
@@ -361,6 +403,7 @@ func (l *Lexer) scanDirectiveOrAccount() Token {
 	// Check for single-letter directives first (Y, P, D)
 	if isDirective(word) {
 		l.afterIndent = false
+		l.inDirective = true // Set directive context
 		return Token{Type: TokenDirective, Value: word, Pos: startPos, End: l.position()}
 	}
 
@@ -384,37 +427,49 @@ func (l *Lexer) scanCommodityOrText() Token {
 	start := l.pos
 	startPos := l.position()
 
-	followsAmount := l.followsAmountNumber(start)
-
-	for l.pos < len(l.input) && l.isLetter(l.peek()) {
-		l.advance()
+	// Header line: everything is Text (description)
+	if l.inTransaction && !l.onPostingLine {
+		return l.scanText()
 	}
 
-	if l.pos > start && l.pos < len(l.input) && !followsAmount {
-		letterPart := l.input[start:l.pos]
-		if l.isAllUppercase(letterPart) {
-			ch := l.peek()
-			if l.isDigit(ch) {
-				return Token{Type: TokenCommodity, Value: letterPart, Pos: startPos, End: l.position()}
+	// Posting line or after sign/number (amount context): scan commodity
+	// Prefix commodity (no number yet): USD222 → USD + 222 (letters only)
+	// Suffix commodity (after number): 10 USD2024 → 10 + USD2024 (letters+digits)
+	// After sign without space: -USD222 → - + USD + 222 (letters only)
+	if l.afterSign || !l.afterNumber {
+		// Scan letters only (prefix commodity or right after sign)
+		for l.pos < len(l.input) {
+			r := l.peekRune()
+			if r == 0 || !unicode.IsLetter(r) {
+				break
 			}
-			if (ch == '-' || ch == '+') && l.pos+1 < len(l.input) && l.isDigit(l.input[l.pos+1]) {
-				return Token{Type: TokenCommodity, Value: letterPart, Pos: startPos, End: l.position()}
+			l.advance()
+		}
+	} else {
+		// Scan letters and digits together (suffix commodity after number)
+		for l.pos < len(l.input) {
+			r := l.peekRune()
+			if r == 0 {
+				break
 			}
+			// Stop at whitespace or special amount-related characters
+			if unicode.IsSpace(r) || r == ';' || r == '@' || r == '=' || r == '(' || r == ')' || r == '[' || r == ']' {
+				break
+			}
+			if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+				break
+			}
+			l.advance()
 		}
 	}
 
-	for l.pos < len(l.input) && (l.isLetter(l.peek()) || l.isDigit(l.peek())) {
-		l.advance()
-	}
-
 	value := l.input[start:l.pos]
-
-	if l.looksLikeCommodity(value) {
+	if len(value) > 0 {
+		l.afterSign = false   // Reset after consuming commodity
+		l.afterNumber = false // Reset after consuming commodity
 		return Token{Type: TokenCommodity, Value: value, Pos: startPos, End: l.position()}
 	}
 
-	l.pos = start
-	l.column = startPos.Column
 	return l.scanText()
 }
 
@@ -431,6 +486,55 @@ func (l *Lexer) scanText() Token {
 	}
 
 	value := strings.TrimSpace(l.input[start:l.pos])
+	return Token{Type: TokenText, Value: value, Pos: startPos, End: l.position()}
+}
+
+// scanDirectiveArg scans a single word argument for directives (e.g., "EUR" in "P 2024-01-15 EUR $1.08")
+// This allows subsequent tokens (like "$1.08") to be scanned separately
+func (l *Lexer) scanDirectiveArg() Token {
+	start := l.pos
+	startPos := l.position()
+
+	// Scan word (letters, digits, and dots for filenames)
+	for l.pos < len(l.input) {
+		r := l.peekRune()
+		if r == 0 {
+			break
+		}
+		// Stop at whitespace or special characters
+		if unicode.IsSpace(r) || r == ';' || r == '|' {
+			break
+		}
+		// For simple words: letters and digits
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '.' && r != '/' && r != '_' && r != '-' {
+			break
+		}
+		l.advance()
+	}
+
+	value := l.input[start:l.pos]
+	if len(value) > 0 {
+		return Token{Type: TokenText, Value: value, Pos: startPos, End: l.position()}
+	}
+	return l.scanText()
+}
+
+// scanSubdirectiveContent scans content of subdirective lines (after indent in directive context)
+func (l *Lexer) scanSubdirectiveContent() Token {
+	start := l.pos
+	startPos := l.position()
+
+	// Scan entire line as text (until newline or comment)
+	for l.pos < len(l.input) {
+		ch := l.peek()
+		if ch == '\n' || ch == ';' {
+			break
+		}
+		l.advance()
+	}
+
+	value := strings.TrimSpace(l.input[start:l.pos])
+	l.afterIndent = false
 	return Token{Type: TokenText, Value: value, Pos: startPos, End: l.position()}
 }
 
@@ -458,8 +562,13 @@ func (l *Lexer) advance() {
 }
 
 func (l *Lexer) skipSpaces() {
-	for l.pos < len(l.input) && l.input[l.pos] == ' ' {
-		l.advance()
+	if l.pos < len(l.input) && l.input[l.pos] == ' ' {
+		// Space after sign means commodity should include digits (like "- USD2024")
+		// afterNumber stays true to indicate we're in suffix commodity context
+		l.afterSign = false
+		for l.pos < len(l.input) && l.input[l.pos] == ' ' {
+			l.advance()
+		}
 	}
 }
 
@@ -535,38 +644,20 @@ func (l *Lexer) nextIsLetterCommodity() bool {
 	return false
 }
 
-func (l *Lexer) followsAmountNumber(pos int) bool {
-	if pos == 0 {
-		return false
-	}
-	p := pos - 1
-	for p >= 0 && l.input[p] == ' ' {
-		p--
-	}
-	if p < 0 {
-		return false
-	}
-	return l.isDigit(l.input[p])
-}
-
-func (l *Lexer) isAllUppercase(s string) bool {
-	for i := 0; i < len(s); i++ {
-		ch := s[i]
-		if ch < 'A' || ch > 'Z' {
-			return false
-		}
-	}
-	return len(s) > 0
-}
-
 func (l *Lexer) scanSign() Token {
 	startPos := l.position()
 	sign := string(l.peek())
 	l.advance()
+	l.afterSign = true // Mark that we're right after a sign
 	return Token{Type: TokenSign, Value: sign, Pos: startPos, End: l.position()}
 }
 
 func (l *Lexer) looksLikeAccount() bool {
+	// On transaction header line, text is description, not account
+	if l.inTransaction && !l.onPostingLine && !l.afterIndent && !l.atStart {
+		return false
+	}
+
 	hasColon := false
 
 	for i := l.pos; i < len(l.input); {
@@ -594,18 +685,6 @@ func (l *Lexer) looksLikeAccount() bool {
 	return hasColon
 }
 
-func (l *Lexer) looksLikeCommodity(value string) bool {
-	if len(value) == 0 {
-		return false
-	}
-	for _, r := range value {
-		if !unicode.IsUpper(r) && !unicode.IsDigit(r) {
-			return false
-		}
-	}
-	return true
-}
-
 func (l *Lexer) looksLikeDate() bool {
 	// Date format: YYYY-MM-DD (minimum 8 chars for YYYY-M-D, typical 10 for YYYY-MM-DD)
 	// We require a SECOND separator to distinguish from numbers like 1000.00
@@ -614,7 +693,7 @@ func (l *Lexer) looksLikeDate() bool {
 	}
 
 	// Check for 4-digit year
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		if !l.isDigit(l.input[l.pos+i]) {
 			return false
 		}

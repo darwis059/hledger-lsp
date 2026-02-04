@@ -352,40 +352,40 @@ func TestLexer_LowercaseCommodity(t *testing.T) {
 		tokens []Token
 	}{
 		{
-			name:  "mixed case FFf returns Text (parser handles as commodity)",
+			name:  "mixed case FFf returns Commodity",
 			input: "    expenses:food  3.000 FFf",
 			tokens: []Token{
 				{Type: TokenIndent, Value: "    "},
 				{Type: TokenAccount, Value: "expenses:food"},
 				{Type: TokenNumber, Value: "3.000"},
-				{Type: TokenText, Value: "FFf"},
+				{Type: TokenCommodity, Value: "FFf"},
 				{Type: TokenEOF},
 			},
 		},
 		{
-			name:  "lowercase Rub returns Text (parser handles as commodity)",
+			name:  "lowercase Rub returns Commodity",
 			input: "    expenses:food  100 Rub",
 			tokens: []Token{
 				{Type: TokenIndent, Value: "    "},
 				{Type: TokenAccount, Value: "expenses:food"},
 				{Type: TokenNumber, Value: "100"},
-				{Type: TokenText, Value: "Rub"},
+				{Type: TokenCommodity, Value: "Rub"},
 				{Type: TokenEOF},
 			},
 		},
 		{
-			name:  "all lowercase hours returns Text (parser handles as commodity)",
+			name:  "all lowercase hours returns Commodity",
 			input: "    work:project  8 hours",
 			tokens: []Token{
 				{Type: TokenIndent, Value: "    "},
 				{Type: TokenAccount, Value: "work:project"},
 				{Type: TokenNumber, Value: "8"},
-				{Type: TokenText, Value: "hours"},
+				{Type: TokenCommodity, Value: "hours"},
 				{Type: TokenEOF},
 			},
 		},
 		{
-			name:  "uppercase only USD2024 returns Commodity",
+			name:  "USD2024 returns Commodity",
 			input: "    assets:stocks  10 USD2024",
 			tokens: []Token{
 				{Type: TokenIndent, Value: "    "},
@@ -396,13 +396,13 @@ func TestLexer_LowercaseCommodity(t *testing.T) {
 			},
 		},
 		{
-			name:  "cyrillic Руб returns Text (parser handles as commodity)",
+			name:  "cyrillic Руб returns Commodity",
 			input: "    expenses:food  100 Руб",
 			tokens: []Token{
 				{Type: TokenIndent, Value: "    "},
 				{Type: TokenAccount, Value: "expenses:food"},
 				{Type: TokenNumber, Value: "100"},
-				{Type: TokenText, Value: "Руб"},
+				{Type: TokenCommodity, Value: "Руб"},
 				{Type: TokenEOF},
 			},
 		},
@@ -424,13 +424,13 @@ func TestLexer_AmbiguousCases(t *testing.T) {
 		tokens []Token
 	}{
 		{
-			name:  "word after amount becomes Text (parser decides if commodity)",
+			name:  "word after amount becomes Commodity",
 			input: "    expenses:food  100 note",
 			tokens: []Token{
 				{Type: TokenIndent, Value: "    "},
 				{Type: TokenAccount, Value: "expenses:food"},
 				{Type: TokenNumber, Value: "100"},
-				{Type: TokenText, Value: "note"},
+				{Type: TokenCommodity, Value: "note"},
 				{Type: TokenEOF},
 			},
 		},
@@ -441,18 +441,20 @@ func TestLexer_AmbiguousCases(t *testing.T) {
 				{Type: TokenIndent, Value: "    "},
 				{Type: TokenAccount, Value: "expenses:food"},
 				{Type: TokenNumber, Value: "100"},
-				{Type: TokenText, Value: "note some text"},
+				{Type: TokenCommodity, Value: "note"},
+				{Type: TokenCommodity, Value: "some"},
+				{Type: TokenCommodity, Value: "text"},
 				{Type: TokenEOF},
 			},
 		},
 		{
-			name:  "comment terminates text",
+			name:  "comment terminates commodity",
 			input: "    expenses:food  100 note ; comment",
 			tokens: []Token{
 				{Type: TokenIndent, Value: "    "},
 				{Type: TokenAccount, Value: "expenses:food"},
 				{Type: TokenNumber, Value: "100"},
-				{Type: TokenText, Value: "note"},
+				{Type: TokenCommodity, Value: "note"},
 				{Type: TokenComment, Value: " comment"},
 				{Type: TokenEOF},
 			},
@@ -1070,7 +1072,7 @@ func TestLexer_AmountFormatVariations(t *testing.T) {
 		tokens []Token
 	}{
 		{
-			name:  "-USD222 should split into sign, commodity, number",
+			name:  "-USD222 splits into sign, commodity, number",
 			input: "-USD222",
 			tokens: []Token{
 				{Type: TokenSign, Value: "-"},
@@ -1080,7 +1082,7 @@ func TestLexer_AmountFormatVariations(t *testing.T) {
 			},
 		},
 		{
-			name:  "USD222 should split into commodity, number (in posting context)",
+			name:  "USD222 splits (prefix commodity in posting)",
 			input: "    a:b  USD222",
 			tokens: []Token{
 				{Type: TokenIndent, Value: "    "},
@@ -1091,7 +1093,7 @@ func TestLexer_AmountFormatVariations(t *testing.T) {
 			},
 		},
 		{
-			name:  "USD-222 should split into commodity, sign, number (in posting context)",
+			name:  "USD-222 splits at sign",
 			input: "    a:b  USD-222",
 			tokens: []Token{
 				{Type: TokenIndent, Value: "    "},
@@ -1123,7 +1125,7 @@ func TestLexer_AmountFormatVariations(t *testing.T) {
 			},
 		},
 		{
-			name:  "+USD100 should split into sign, commodity, number",
+			name:  "+USD100 splits into sign, commodity, number",
 			input: "+USD100",
 			tokens: []Token{
 				{Type: TokenSign, Value: "+"},
@@ -1133,7 +1135,7 @@ func TestLexer_AmountFormatVariations(t *testing.T) {
 			},
 		},
 		{
-			name:  "EUR+50 should split into commodity, sign, number (in posting context)",
+			name:  "EUR+50 splits at sign",
 			input: "    a:b  EUR+50",
 			tokens: []Token{
 				{Type: TokenIndent, Value: "    "},
@@ -1145,7 +1147,7 @@ func TestLexer_AmountFormatVariations(t *testing.T) {
 			},
 		},
 		{
-			name:  "posting with -USD222",
+			name:  "posting with -USD222 splits",
 			input: "    expenses:food  -USD222",
 			tokens: []Token{
 				{Type: TokenIndent, Value: "    "},
@@ -1393,6 +1395,277 @@ func TestLexer_ScanAccount_EndPosition(t *testing.T) {
 
 			assert.Equal(t, tt.wantEndCol, tok.End.Column, "account End column should be right after last char of account name")
 			assert.Equal(t, tt.wantEndOff, tok.End.Offset, "account End offset should be right after last char of account name")
+		})
+	}
+}
+
+func TestLexer_TransactionHeaderDescriptionWithColons(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []Token
+	}{
+		{
+			name:  "cyrillic description with colon",
+			input: "2024-01-15 * Расходы:Продукты",
+			want: []Token{
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenStatus, Value: "*"},
+				{Type: TokenText, Value: "Расходы:Продукты"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "latin description with colon",
+			input: "2024-01-15 * Expenses:Food",
+			want: []Token{
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenStatus, Value: "*"},
+				{Type: TokenText, Value: "Expenses:Food"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "description with multiple colons",
+			input: "2024-01-15 * Category:Sub:Item",
+			want: []Token{
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenStatus, Value: "*"},
+				{Type: TokenText, Value: "Category:Sub:Item"},
+				{Type: TokenEOF},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			tokens := collectTokens(lexer)
+			assertTokenTypesAndValues(t, tt.want, tokens)
+		})
+	}
+}
+
+func TestLexer_TransactionHeaderUppercaseDescription(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []Token
+	}{
+		{
+			name:  "AWS as description",
+			input: "2024-01-15 * AWS",
+			want: []Token{
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenStatus, Value: "*"},
+				{Type: TokenText, Value: "AWS"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "IBM as description",
+			input: "2024-01-15 * IBM",
+			want: []Token{
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenStatus, Value: "*"},
+				{Type: TokenText, Value: "IBM"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "NASA as description with code",
+			input: "2024-01-15 * (12345) NASA",
+			want: []Token{
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenStatus, Value: "*"},
+				{Type: TokenCode, Value: "12345"},
+				{Type: TokenText, Value: "NASA"},
+				{Type: TokenEOF},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			tokens := collectTokens(lexer)
+			assertTokenTypesAndValues(t, tt.want, tokens)
+		})
+	}
+}
+
+func TestLexer_CommodityOnPostingStillWorks(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []Token
+	}{
+		{
+			name:  "uppercase commodity on posting",
+			input: "2024-01-15 * AWS\n    expenses:cloud  100 USD",
+			want: []Token{
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenStatus, Value: "*"},
+				{Type: TokenText, Value: "AWS"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenAccount, Value: "expenses:cloud"},
+				{Type: TokenNumber, Value: "100"},
+				{Type: TokenCommodity, Value: "USD"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "account with colon on posting",
+			input: "2024-01-15 * Расходы:Продукты\n    expenses:food  100 RUB",
+			want: []Token{
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenStatus, Value: "*"},
+				{Type: TokenText, Value: "Расходы:Продукты"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenAccount, Value: "expenses:food"},
+				{Type: TokenNumber, Value: "100"},
+				{Type: TokenCommodity, Value: "RUB"},
+				{Type: TokenEOF},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			tokens := collectTokens(lexer)
+			assertTokenTypesAndValues(t, tt.want, tokens)
+		})
+	}
+}
+
+func TestLexer_PriceDirective(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []Token
+	}{
+		{
+			name:  "P directive with currency symbol",
+			input: "P 2024-01-15 EUR $1.08",
+			want: []Token{
+				{Type: TokenDirective, Value: "P"},
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenText, Value: "EUR"},
+				{Type: TokenCommodity, Value: "$"},
+				{Type: TokenNumber, Value: "1.08"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "P directive with text commodity",
+			input: "P 2024-01-15 USD ₽75.50",
+			want: []Token{
+				{Type: TokenDirective, Value: "P"},
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenText, Value: "USD"},
+				{Type: TokenCommodity, Value: "₽"},
+				{Type: TokenNumber, Value: "75.50"},
+				{Type: TokenEOF},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			tokens := collectTokens(lexer)
+			assertTokenTypesAndValues(t, tt.want, tokens)
+		})
+	}
+}
+
+func TestLexer_CommodityDirectiveWithSubdirective(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []Token
+	}{
+		{
+			name:  "commodity directive with format subdirective",
+			input: "commodity RUB\n  format 1.000,00 RUB",
+			want: []Token{
+				{Type: TokenDirective, Value: "commodity"},
+				{Type: TokenText, Value: "RUB"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenText, Value: "format 1.000,00 RUB"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "commodity directive with multiple subdirectives",
+			input: "commodity USD\n  format $1,000.00\n  note US Dollar",
+			want: []Token{
+				{Type: TokenDirective, Value: "commodity"},
+				{Type: TokenText, Value: "USD"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenText, Value: "format $1,000.00"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenText, Value: "note US Dollar"},
+				{Type: TokenEOF},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			tokens := collectTokens(lexer)
+			assertTokenTypesAndValues(t, tt.want, tokens)
+		})
+	}
+}
+
+func TestLexer_AccountDirectiveWithSubdirectives(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []Token
+	}{
+		{
+			name:  "account directive with alias",
+			input: "account expenses:food\n  alias food",
+			want: []Token{
+				{Type: TokenDirective, Value: "account"},
+				{Type: TokenAccount, Value: "expenses:food"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenText, Value: "alias food"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "account directive with multiple subdirectives",
+			input: "account expenses:food\n  alias food\n  note Food expenses",
+			want: []Token{
+				{Type: TokenDirective, Value: "account"},
+				{Type: TokenAccount, Value: "expenses:food"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenText, Value: "alias food"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenText, Value: "note Food expenses"},
+				{Type: TokenEOF},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			tokens := collectTokens(lexer)
+			assertTokenTypesAndValues(t, tt.want, tokens)
 		})
 	}
 }
