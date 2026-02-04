@@ -1775,3 +1775,115 @@ func TestParser_MixedWhitespaceBetweenAccountAndAmount(t *testing.T) {
 	require.NotNil(t, posting.Amount)
 	assert.Equal(t, "169", posting.Amount.Quantity.String())
 }
+
+func TestParser_ApplyAccount(t *testing.T) {
+	input := `apply account business
+
+2024-01-15 Sale
+    revenue    $100
+    checking
+
+end apply account
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	tx := journal.Transactions[0]
+	assert.Equal(t, "business:revenue", tx.Postings[0].Account.Name)
+	assert.Equal(t, "business:checking", tx.Postings[1].Account.Name)
+}
+
+func TestParser_NestedApplyAccount(t *testing.T) {
+	input := `apply account business
+apply account europe
+
+2024-01-15 Sale
+    revenue    $100
+    checking
+
+end apply account
+end apply account
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+
+	tx := journal.Transactions[0]
+	assert.Equal(t, "business:europe:revenue", tx.Postings[0].Account.Name)
+	assert.Equal(t, "business:europe:checking", tx.Postings[1].Account.Name)
+}
+
+func TestParser_ApplyAccountNoEnd(t *testing.T) {
+	input := `apply account personal
+
+2024-01-15 Groceries
+    expenses:food    $50
+    checking
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs) // NOT an error!
+
+	tx := journal.Transactions[0]
+	assert.Equal(t, "personal:expenses:food", tx.Postings[0].Account.Name)
+	assert.Equal(t, "personal:checking", tx.Postings[1].Account.Name)
+}
+
+func TestParser_ApplyAccountComplex(t *testing.T) {
+	input := `; Transaction without apply account
+2024-01-10 No prefix
+    revenue    $50
+    checking
+
+apply account business
+
+2024-01-15 With business prefix
+    revenue    $100
+    checking
+
+apply account europe
+
+2024-01-20 With business:europe prefix
+    revenue    $200
+    checking
+
+end apply account
+
+2024-01-25 Back to business prefix
+    revenue    $150
+    checking
+
+end apply account
+
+2024-01-30 No prefix again
+    revenue    $75
+    checking
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 5)
+
+	// Transaction 1: No prefix
+	tx := journal.Transactions[0]
+	assert.Equal(t, "revenue", tx.Postings[0].Account.Name)
+	assert.Equal(t, "checking", tx.Postings[1].Account.Name)
+
+	// Transaction 2: business prefix
+	tx = journal.Transactions[1]
+	assert.Equal(t, "business:revenue", tx.Postings[0].Account.Name)
+	assert.Equal(t, "business:checking", tx.Postings[1].Account.Name)
+
+	// Transaction 3: business:europe prefix
+	tx = journal.Transactions[2]
+	assert.Equal(t, "business:europe:revenue", tx.Postings[0].Account.Name)
+	assert.Equal(t, "business:europe:checking", tx.Postings[1].Account.Name)
+
+	// Transaction 4: back to business prefix
+	tx = journal.Transactions[3]
+	assert.Equal(t, "business:revenue", tx.Postings[0].Account.Name)
+	assert.Equal(t, "business:checking", tx.Postings[1].Account.Name)
+
+	// Transaction 5: no prefix
+	tx = journal.Transactions[4]
+	assert.Equal(t, "revenue", tx.Postings[0].Account.Name)
+	assert.Equal(t, "checking", tx.Postings[1].Account.Name)
+}

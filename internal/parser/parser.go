@@ -21,11 +21,12 @@ func (e ParseError) Error() string {
 }
 
 type Parser struct {
-	lexer       *Lexer
-	current     Token
-	errors      []ParseError
-	defaultYear int
-	inputLen    int
+	lexer           *Lexer
+	current         Token
+	errors          []ParseError
+	defaultYear     int
+	inputLen        int
+	accountPrefixes []string // stack for nested apply account directives
 }
 
 func Parse(input string) (*ast.Journal, []ParseError) {
@@ -409,8 +410,13 @@ func (p *Parser) parsePosting() *ast.Posting {
 		return nil
 	}
 
+	accountName := p.current.Value
+	if prefix := p.getAccountPrefix(); prefix != "" {
+		accountName = prefix + ":" + accountName
+	}
+
 	posting.Account = ast.Account{
-		Name:  p.current.Value,
+		Name:  accountName,
 		Range: ast.Range{Start: toASTPosition(p.current.Pos), End: toASTPosition(p.current.End)},
 	}
 	p.advance()
@@ -583,6 +589,8 @@ func (p *Parser) parseDirective() ast.Directive {
 		return p.parseTagDirective(pos)
 	case "alias":
 		return p.parseAliasDirective(pos)
+	case "apply":
+		return p.parseApplyDirective(pos)
 	case "comment":
 		return p.parseCommentBlock(pos)
 	case "end":
@@ -981,6 +989,49 @@ func (p *Parser) parseAliasDirective(startPos Position) ast.Directive {
 	return dir
 }
 
+func (p *Parser) parseApplyDirective(_ Position) ast.Directive {
+	// Expect "account" after "apply"
+	if p.current.Type != TokenText && p.current.Type != TokenCommodity && p.current.Type != TokenAccount {
+		p.error("expected 'account' after 'apply'")
+		p.skipToNextLine()
+		return nil
+	}
+
+	if strings.TrimSpace(p.current.Value) != "account" {
+		p.error("expected 'account' after 'apply'")
+		p.skipToNextLine()
+		return nil
+	}
+	p.advance()
+
+	// Parse prefix (rest of line)
+	var prefixParts []string
+	for p.current.Type != TokenNewline && p.current.Type != TokenEOF && p.current.Type != TokenComment {
+		switch p.current.Type {
+		case TokenText, TokenAccount:
+			prefixParts = append(prefixParts, p.current.Value)
+		case TokenColon:
+			prefixParts = append(prefixParts, ":")
+		}
+		p.advance()
+	}
+
+	prefix := strings.Join(prefixParts, "")
+	if prefix == "" {
+		p.error("expected account prefix after 'apply account'")
+		p.skipToNextLine()
+		return nil
+	}
+
+	// Push to stack
+	p.accountPrefixes = append(p.accountPrefixes, prefix)
+
+	p.skipToNextLine()
+
+	// Return nil for now (no AST type needed for minimal implementation)
+	return nil
+}
+
 func (p *Parser) parseCommentBlock(_ Position) ast.Directive {
 	// Skip to next line after "comment"
 	p.skipToNextLine()
@@ -1010,7 +1061,7 @@ func (p *Parser) parseCommentBlock(_ Position) ast.Directive {
 
 func (p *Parser) parseEndDirective(_ Position) ast.Directive {
 	// Check what we're ending
-	if p.current.Type == TokenText {
+	if p.current.Type == TokenText || p.current.Type == TokenDirective || p.current.Type == TokenAccount || p.current.Type == TokenCommodity {
 		endType := strings.TrimSpace(p.current.Value)
 		switch endType {
 		case "comment":
@@ -1020,7 +1071,19 @@ func (p *Parser) parseEndDirective(_ Position) ast.Directive {
 			p.skipToNextLine()
 			return nil
 		case "apply":
-			// Future: handle "end apply account"
+			// Handle "end apply account"
+			p.advance()
+			if p.current.Type == TokenText || p.current.Type == TokenCommodity || p.current.Type == TokenAccount {
+				if strings.TrimSpace(p.current.Value) == "account" {
+					// Pop from stack
+					if len(p.accountPrefixes) > 0 {
+						p.accountPrefixes = p.accountPrefixes[:len(p.accountPrefixes)-1]
+					}
+					p.skipToNextLine()
+					return nil
+				}
+			}
+			p.error("expected 'account' after 'end apply'")
 			p.skipToNextLine()
 			return nil
 		default:
@@ -1143,6 +1206,13 @@ func isValidTagName(name string) bool {
 
 func (p *Parser) advance() {
 	p.current = p.lexer.Next()
+}
+
+func (p *Parser) getAccountPrefix() string {
+	if len(p.accountPrefixes) == 0 {
+		return ""
+	}
+	return strings.Join(p.accountPrefixes, ":")
 }
 
 func (p *Parser) skipToNextLine() {
