@@ -331,6 +331,49 @@ func TestParser_AliasDirective(t *testing.T) {
 	}
 }
 
+func TestParser_PeriodicTransaction(t *testing.T) {
+	input := `~ monthly
+    expenses:rent    $2000
+    assets:checking
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.PeriodicTransactions, 1)
+
+	ptx := journal.PeriodicTransactions[0]
+	assert.Equal(t, "monthly", ptx.Period)
+	require.Len(t, ptx.Postings, 2)
+	assert.Equal(t, "expenses:rent", ptx.Postings[0].Account.Name)
+}
+
+func TestParser_CommentBlock(t *testing.T) {
+	input := `account assets:checking
+
+comment
+This is a multi-line comment
+that should be ignored
+2024-01-01 Invalid transaction
+    expenses:food  $50
+end comment
+
+2024-01-15 Real transaction
+    expenses:food  $30
+    assets:checking
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+
+	// Should have 1 account directive and 1 transaction (comment block ignored)
+	require.Len(t, journal.Directives, 1)
+	require.Len(t, journal.Transactions, 1)
+
+	tx := journal.Transactions[0]
+	assert.Equal(t, 2024, tx.Date.Year)
+	assert.Equal(t, 1, tx.Date.Month)
+	assert.Equal(t, 15, tx.Date.Day)
+	assert.Equal(t, "Real transaction", tx.Description)
+}
+
 func TestParser_DecimalMarkDirective(t *testing.T) {
 	tests := []struct {
 		name     string

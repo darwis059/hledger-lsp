@@ -67,6 +67,11 @@ func (l *Lexer) scanLineStart() Token {
 		return l.scanDirectiveOrAccount()
 	}
 
+	if l.peek() == '~' {
+		l.advance()
+		return l.makeToken(TokenTilde, "~")
+	}
+
 	return l.scanInLine()
 }
 

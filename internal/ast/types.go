@@ -14,15 +14,29 @@ type Position struct {
 }
 
 type Journal struct {
-	Transactions []Transaction
-	Directives   []Directive
-	Comments     []Comment
-	Includes     []Include
+	Transactions         []Transaction
+	PeriodicTransactions []PeriodicTransaction
+	Directives           []Directive
+	Comments             []Comment
+	Includes             []Include
 }
 
 type Transaction struct {
 	Date        Date
 	Date2       *Date
+	Status      Status
+	Code        string
+	Description string
+	Payee       string
+	Note        string
+	Postings    []Posting
+	Tags        []Tag
+	Comments    []Comment
+	Range       Range
+}
+
+type PeriodicTransaction struct {
+	Period      string
 	Status      Status
 	Code        string
 	Description string

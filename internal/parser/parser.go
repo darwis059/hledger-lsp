@@ -54,6 +54,11 @@ func (p *Parser) parseJournal() *ast.Journal {
 			if tx != nil {
 				journal.Transactions = append(journal.Transactions, *tx)
 			}
+		case TokenTilde:
+			ptx := p.parsePeriodicTransaction()
+			if ptx != nil {
+				journal.PeriodicTransactions = append(journal.PeriodicTransactions, *ptx)
+			}
 		case TokenDirective:
 			dir := p.parseDirective()
 			if dir != nil {
@@ -142,6 +147,82 @@ func (p *Parser) parseTransaction() *ast.Transaction {
 
 	tx.Range.End = toASTPosition(p.current.Pos)
 	return tx
+}
+
+func (p *Parser) parsePeriodicTransaction() *ast.PeriodicTransaction {
+	ptx := &ast.PeriodicTransaction{
+		Postings: make([]ast.Posting, 0, 3),
+	}
+	ptx.Range.Start = toASTPosition(p.current.Pos)
+
+	// Skip the ~ token
+	p.advance()
+
+	// Parse period expression (e.g., "monthly", "every 2 weeks")
+	if p.current.Type == TokenText {
+		ptx.Period = strings.TrimSpace(p.current.Value)
+		p.advance()
+	} else {
+		p.error("expected period expression after ~")
+		p.skipToNextLine()
+		return nil
+	}
+
+	// Parse optional status
+	if p.current.Type == TokenStatus {
+		ptx.Status = p.parseStatus()
+	}
+
+	// Parse optional code
+	if p.current.Type == TokenCode {
+		ptx.Code = p.current.Value
+		p.advance()
+	}
+
+	// Parse optional description
+	if p.current.Type == TokenText {
+		desc := p.current.Value
+		p.advance()
+
+		if p.current.Type == TokenPipe {
+			ptx.Payee = strings.TrimSpace(desc)
+			p.advance()
+			if p.current.Type == TokenText {
+				ptx.Note = strings.TrimSpace(p.current.Value)
+				p.advance()
+			}
+			ptx.Description = ptx.Payee
+			if ptx.Note != "" {
+				ptx.Description = ptx.Payee + " | " + ptx.Note
+			}
+		} else {
+			ptx.Description = desc
+		}
+	}
+
+	// Parse optional comment
+	if p.current.Type == TokenComment {
+		ptx.Comments = append(ptx.Comments, p.parseComment())
+	}
+
+	// Skip newline
+	if p.current.Type == TokenNewline {
+		p.advance()
+	}
+
+	// Parse postings
+	for p.current.Type == TokenIndent {
+		posting := p.parsePosting()
+		if posting != nil {
+			ptx.Postings = append(ptx.Postings, *posting)
+		}
+		if p.current.Type == TokenNewline {
+			p.advance()
+		}
+	}
+
+	ptx.Range.End = toASTPosition(p.current.Pos)
+	return ptx
 }
 
 func (p *Parser) parseDate() *ast.Date {
@@ -443,6 +524,10 @@ func (p *Parser) parseDirective() ast.Directive {
 		return p.parseTagDirective(pos)
 	case "alias":
 		return p.parseAliasDirective(pos)
+	case "comment":
+		return p.parseCommentBlock(pos)
+	case "end":
+		return p.parseEndDirective(pos)
 	default:
 		p.skipToNextLine()
 		return nil
@@ -835,6 +920,60 @@ func (p *Parser) parseAliasDirective(startPos Position) ast.Directive {
 	dir.Alias = strings.Join(aliasParts, "")
 	dir.Range.End = toASTPosition(p.current.Pos)
 	return dir
+}
+
+func (p *Parser) parseCommentBlock(_ Position) ast.Directive {
+	// Skip to next line after "comment"
+	p.skipToNextLine()
+
+	// Skip all tokens until we find "end comment"
+	for p.current.Type != TokenEOF {
+		// Check for "end" directive
+		if p.current.Type == TokenDirective && p.current.Value == "end" {
+			p.advance()
+			// Check if the next token is "comment"
+			if (p.current.Type == TokenText || p.current.Type == TokenAccount ||
+				p.current.Type == TokenDirective || p.current.Type == TokenCommodity) &&
+				strings.TrimSpace(p.current.Value) == "comment" {
+				// Found "end comment", skip to next line and return
+				p.skipToNextLine()
+				return nil
+			}
+		}
+		// Not "end comment", keep skipping
+		p.advance()
+	}
+
+	// Reached EOF without finding "end comment"
+	p.error("unclosed comment block")
+	return nil
+}
+
+func (p *Parser) parseEndDirective(_ Position) ast.Directive {
+	// Check what we're ending
+	if p.current.Type == TokenText {
+		endType := strings.TrimSpace(p.current.Value)
+		switch endType {
+		case "comment":
+			// This should be handled by parseCommentBlock
+			// If we get here, it's an unexpected "end comment"
+			p.error("unexpected 'end comment' without matching 'comment'")
+			p.skipToNextLine()
+			return nil
+		case "apply":
+			// Future: handle "end apply account"
+			p.skipToNextLine()
+			return nil
+		default:
+			p.error("unknown 'end' directive type: %s", endType)
+			p.skipToNextLine()
+			return nil
+		}
+	}
+
+	p.error("expected directive type after 'end'")
+	p.skipToNextLine()
+	return nil
 }
 
 func (p *Parser) parseYearDirective(startPos Position) ast.Directive {
