@@ -562,11 +562,16 @@ func (l *Lexer) advance() {
 }
 
 func (l *Lexer) skipSpaces() {
-	if l.pos < len(l.input) && l.input[l.pos] == ' ' {
-		// Space after sign means commodity should include digits (like "- USD2024")
+	ch := l.peek()
+	if ch == ' ' || ch == '\t' {
+		// Space/tab after sign means commodity should include digits (like "- USD2024")
 		// afterNumber stays true to indicate we're in suffix commodity context
 		l.afterSign = false
-		for l.pos < len(l.input) && l.input[l.pos] == ' ' {
+		for l.pos < len(l.input) {
+			ch = l.peek()
+			if ch != ' ' && ch != '\t' {
+				break
+			}
 			l.advance()
 		}
 	}

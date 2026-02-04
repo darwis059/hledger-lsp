@@ -1413,3 +1413,26 @@ func TestParser_PartialDateWithNoCommodityAmount(t *testing.T) {
 	require.NotNil(t, posting.Amount, "amount should not be nil")
 	assert.Equal(t, "169", posting.Amount.Quantity.String())
 }
+
+func TestParser_TabBetweenAccountAndAmount(t *testing.T) {
+	input := "2024-01-15 test\n    expenses:food\t169\n    assets:cash"
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs, "tab between account and amount should be valid")
+	require.Len(t, journal.Transactions, 1)
+
+	posting := journal.Transactions[0].Postings[0]
+	require.NotNil(t, posting.Amount, "amount should be parsed")
+	assert.Equal(t, "169", posting.Amount.Quantity.String())
+}
+
+func TestParser_MixedWhitespaceBetweenAccountAndAmount(t *testing.T) {
+	input := "2024-01-15 test\n    expenses:food  \t  169\n    assets:cash"
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+
+	posting := journal.Transactions[0].Postings[0]
+	require.NotNil(t, posting.Amount)
+	assert.Equal(t, "169", posting.Amount.Quantity.String())
+}
