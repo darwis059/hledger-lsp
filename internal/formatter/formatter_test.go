@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.lsp.dev/protocol"
 
+	"github.com/juev/hledger-lsp/internal/ast"
 	"github.com/juev/hledger-lsp/internal/lsputil"
 	"github.com/juev/hledger-lsp/internal/parser"
 )
@@ -824,6 +825,69 @@ func TestFormatDocument_DefaultFormatFallback(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "Expected amount formatted with default format fallback (846 661,89 USD), got edits: %v", edits)
+}
+
+func TestFormatDocument_NoCommodityAmount(t *testing.T) {
+	t.Run("basic no commodity amount", func(t *testing.T) {
+		input := `Y2019
+
+12/31 * Apple
+    Расходы:Развлечения:Музыка       169
+    Активы:Тинькофф:Текущий`
+
+		journal, errs := parser.Parse(input)
+		require.Empty(t, errs)
+
+		posting := journal.Transactions[0].Postings[0]
+		require.NotNil(t, posting.Amount, "amount must be parsed")
+		assert.Equal(t, "", posting.Amount.Commodity.Symbol, "amount should have empty commodity symbol")
+		assert.Equal(t, ast.CommodityLeft, posting.Amount.Commodity.Position, "default position should be CommodityLeft")
+		assert.Equal(t, "169", posting.Amount.Quantity.String(), "amount quantity should be 169")
+
+		edits := FormatDocument(journal, input)
+		result := applyEdits(input, edits)
+
+		assert.Contains(t, result, "169", "amount should be preserved in formatted output")
+
+		lines := strings.Split(result, "\n")
+		require.GreaterOrEqual(t, len(lines), 4)
+
+		postingLine := lines[3]
+		assert.Contains(t, postingLine, "169", "posting line should contain amount 169")
+		assert.Contains(t, postingLine, "Расходы:Развлечения:Музыка", "posting line should contain account name")
+
+		t.Logf("Formatted posting line: %q", postingLine)
+	})
+
+	t.Run("no commodity with multiple transactions for global alignment", func(t *testing.T) {
+		input := `Y2019
+
+12/30 * Transaction 1
+    Short:Account  100
+    Assets:Cash
+
+12/31 * Apple
+    Расходы:Развлечения:Музыка       169
+    Активы:Тинькофф:Текущий`
+
+		journal, errs := parser.Parse(input)
+		require.Empty(t, errs)
+
+		edits := FormatDocument(journal, input)
+		result := applyEdits(input, edits)
+
+		assert.Contains(t, result, "100", "first amount should be preserved")
+		assert.Contains(t, result, "169", "second amount should be preserved")
+
+		lines := strings.Split(result, "\n")
+		t.Logf("Formatted result:\n%s", result)
+
+		for i, line := range lines {
+			if strings.Contains(line, "Расходы:Развлечения:Музыка") {
+				assert.Contains(t, line, "169", "line %d should contain amount 169: %q", i, line)
+			}
+		}
+	})
 }
 
 func applyEdits(content string, edits []protocol.TextEdit) string {

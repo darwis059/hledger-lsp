@@ -1396,3 +1396,20 @@ func Test_normalizeNumber(t *testing.T) {
 		})
 	}
 }
+
+func TestParser_PartialDateWithNoCommodityAmount(t *testing.T) {
+	input := `Y2019
+
+12/31 * Apple
+    Расходы:Развлечения:Музыка       169
+    Активы:Тинькофф:Текущий`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs, "parsing should succeed")
+	require.Len(t, journal.Transactions, 1)
+
+	tx := journal.Transactions[0]
+	posting := tx.Postings[0]
+	require.NotNil(t, posting.Amount, "amount should not be nil")
+	assert.Equal(t, "169", posting.Amount.Quantity.String())
+}
