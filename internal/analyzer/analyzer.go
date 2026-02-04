@@ -444,7 +444,7 @@ func checkUndeclaredAccounts(tx *ast.Transaction, declared map[string]bool) []Di
 	for _, posting := range tx.Postings {
 		if !isAccountDeclared(posting.Account.Name, declared) {
 			diags = append(diags, Diagnostic{
-				Range:    posting.Range,
+				Range:    posting.Account.Range,
 				Severity: SeverityWarning,
 				Code:     "UNDECLARED_ACCOUNT",
 				Message:  fmt.Sprintf("account '%s' is not declared", posting.Account.Name),

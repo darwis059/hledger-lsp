@@ -7,20 +7,24 @@ import (
 )
 
 type Lexer struct {
-	input   string
-	pos     int
-	line    int
-	column  int
-	atStart bool
+	input         string
+	pos           int
+	line          int
+	column        int
+	atStart       bool
+	afterIndent   bool
+	inTransaction bool
 }
 
 func NewLexer(input string) *Lexer {
 	return &Lexer{
-		input:   input,
-		pos:     0,
-		line:    1,
-		column:  1,
-		atStart: true,
+		input:         input,
+		pos:           0,
+		line:          1,
+		column:        1,
+		atStart:       true,
+		afterIndent:   false,
+		inTransaction: false,
 	}
 }
 
@@ -135,6 +139,7 @@ func (l *Lexer) scanDate() Token {
 	}
 
 	value := l.input[start:l.pos]
+	l.inTransaction = true
 	return Token{Type: TokenDate, Value: value, Pos: startPos, End: l.position()}
 }
 
@@ -184,6 +189,10 @@ func (l *Lexer) scanIndent() Token {
 	}
 
 	value := l.input[start:l.pos]
+	// Only set afterIndent if we're in a transaction context (after seeing a date)
+	if l.inTransaction {
+		l.afterIndent = true
+	}
 	return Token{Type: TokenIndent, Value: value, Pos: startPos, End: l.position()}
 }
 
@@ -193,6 +202,11 @@ func (l *Lexer) scanNewline() Token {
 	l.line++
 	l.column = 1
 	l.atStart = true
+	l.afterIndent = false
+	// Check if next line starts at column 1 (not indented) - this ends the transaction
+	if l.pos < len(l.input) && !l.isWhitespace(l.peek()) {
+		l.inTransaction = false
+	}
 	return Token{Type: TokenNewline, Value: "\n", Pos: startPos, End: l.position()}
 }
 
@@ -200,6 +214,7 @@ func (l *Lexer) scanAccount() Token {
 	start := l.pos
 	startPos := l.position()
 	lastNonSpace := start
+	lastNonSpaceColumn := l.column
 
 	for l.pos < len(l.input) {
 		r, size := utf8.DecodeRuneInString(l.input[l.pos:])
@@ -220,10 +235,13 @@ func (l *Lexer) scanAccount() Token {
 		l.pos += size
 		l.column++
 		lastNonSpace = l.pos
+		lastNonSpaceColumn = l.column
 	}
 
 	value := l.input[start:lastNonSpace]
-	return Token{Type: TokenAccount, Value: value, Pos: startPos, End: l.position()}
+	endPos := Position{Line: startPos.Line, Column: lastNonSpaceColumn, Offset: lastNonSpace}
+	l.afterIndent = false
+	return Token{Type: TokenAccount, Value: value, Pos: startPos, End: endPos}
 }
 
 // isAccountTerminator returns true for characters that end account names in hledger format.
@@ -342,6 +360,7 @@ func (l *Lexer) scanDirectiveOrAccount() Token {
 
 	// Check for single-letter directives first (Y, P, D)
 	if isDirective(word) {
+		l.afterIndent = false
 		return Token{Type: TokenDirective, Value: word, Pos: startPos, End: l.position()}
 	}
 
@@ -565,6 +584,11 @@ func (l *Lexer) looksLikeAccount() bool {
 		} else {
 			i += size
 		}
+	}
+
+	// In posting context (after indent), accounts without colons are valid
+	if l.afterIndent {
+		return true
 	}
 
 	return hasColon

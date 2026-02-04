@@ -1347,3 +1347,52 @@ func TestLexer_DateBoundaryConditions(t *testing.T) {
 		})
 	}
 }
+
+func TestLexer_ScanAccount_EndPosition(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		wantValue  string
+		wantEndCol int
+		wantEndOff int
+	}{
+		{
+			name:       "account with trailing spaces before amount",
+			input:      "    expenses:food  $50",
+			wantValue:  "expenses:food",
+			wantEndCol: 18, // 4 (indent) + 13 (account) + 1 = 18
+			wantEndOff: 17, // offset is 0-indexed, so 4 + 13 = 17
+		},
+		{
+			name:       "account without amount",
+			input:      "    assets:cash",
+			wantValue:  "assets:cash",
+			wantEndCol: 16, // 4 (indent) + 11 (account) + 1 = 16
+			wantEndOff: 15, // 4 + 11 = 15
+		},
+		{
+			name:       "account with one trailing space",
+			input:      "    equity:opening  ",
+			wantValue:  "equity:opening",
+			wantEndCol: 19, // 4 (indent) + 14 (account) + 1 = 19
+			wantEndOff: 18, // 4 + 14 = 18
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			tokens := collectTokens(lexer)
+
+			tok := findToken(tokens, TokenAccount)
+			require.NotNil(t, tok, "expected Account token")
+			assert.Equal(t, tt.wantValue, tok.Value, "account value mismatch")
+
+			t.Logf("Got End: Line=%d Col=%d Offset=%d", tok.End.Line, tok.End.Column, tok.End.Offset)
+			t.Logf("Want End: Col=%d Offset=%d", tt.wantEndCol, tt.wantEndOff)
+
+			assert.Equal(t, tt.wantEndCol, tok.End.Column, "account End column should be right after last char of account name")
+			assert.Equal(t, tt.wantEndOff, tok.End.Offset, "account End offset should be right after last char of account name")
+		})
+	}
+}

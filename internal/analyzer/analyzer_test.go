@@ -816,3 +816,72 @@ func TestAnalyzer_DateTag_DiagnosticRangePointsToTag(t *testing.T) {
 	assert.Equal(t, 2, diag.Range.Start.Line, "diagnostic should point to posting line")
 	assert.Equal(t, 27, diag.Range.Start.Column, "diagnostic should start at tag position, not posting start")
 }
+
+func TestAnalyzer_UndeclaredAccount_RangeCoversOnlyAccount(t *testing.T) {
+	input := `account expenses:food
+
+2024-01-15 test
+    expenses:food  $50
+    custom:wallet  $-50`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	a := New()
+	result := a.Analyze(journal)
+
+	var undeclaredDiag *Diagnostic
+	for i := range result.Diagnostics {
+		if result.Diagnostics[i].Code == "UNDECLARED_ACCOUNT" {
+			undeclaredDiag = &result.Diagnostics[i]
+			break
+		}
+	}
+
+	require.NotNil(t, undeclaredDiag, "expected UNDECLARED_ACCOUNT diagnostic")
+	assert.Contains(t, undeclaredDiag.Message, "custom:wallet")
+
+	// Input line 5: "    custom:wallet  $-50"
+	// custom:wallet starts at column 5 (1-indexed): 4 spaces + 1
+	// custom:wallet ends at column 17 (1-indexed): 4 + 13 + 1 = 18, but End is exclusive so 17
+	assert.Equal(t, 5, undeclaredDiag.Range.Start.Line, "diagnostic should point to posting line")
+	assert.Equal(t, 5, undeclaredDiag.Range.Start.Column, "diagnostic should start at account name, not indent")
+
+	// The diagnostic should NOT cover the amount "$-50"
+	// Account "custom:wallet" has 13 characters, so End column should be around 5 + 13 = 18
+	assert.LessOrEqual(t, undeclaredDiag.Range.End.Column, 18, "diagnostic should end at account name, not include amount")
+}
+
+func TestParser_AccountWithoutColon(t *testing.T) {
+	input := `account expenses
+
+2024-01-15 test
+    dsf  $50
+    expenses  $-50`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	a := New()
+	result := a.Analyze(journal)
+
+	// Should have UNDECLARED_ACCOUNT diagnostic for "dsf"
+	var foundDsf bool
+	for _, d := range result.Diagnostics {
+		if d.Code == "UNDECLARED_ACCOUNT" && strings.Contains(d.Message, "dsf") {
+			foundDsf = true
+		}
+	}
+
+	assert.True(t, foundDsf, "account 'dsf' without colon should be recognized and flagged as undeclared")
+
+	// Should have 2 postings in transaction
+	require.Len(t, journal.Transactions, 1)
+	require.Len(t, journal.Transactions[0].Postings, 2, "should parse both postings even without colons")
+
+	// First posting should have account "dsf"
+	assert.Equal(t, "dsf", journal.Transactions[0].Postings[0].Account.Name)
+
+	// Second posting should have account "expenses"
+	assert.Equal(t, "expenses", journal.Transactions[0].Postings[1].Account.Name)
+}
