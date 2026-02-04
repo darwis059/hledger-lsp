@@ -23,7 +23,7 @@ func CalculateAccountBalances(journal *ast.Journal) AccountBalances {
 				continue
 			}
 
-			accountName := p.Account.Name
+			accountName := p.Account.GetResolvedName()
 			commodity := p.Amount.Commodity.Symbol
 
 			if balances[accountName] == nil {
@@ -48,7 +48,7 @@ func CalculateAccountBalancesFromTransactions(transactions []ast.Transaction) Ac
 				continue
 			}
 
-			accountName := p.Account.Name
+			accountName := p.Account.GetResolvedName()
 			commodity := p.Amount.Commodity.Symbol
 
 			if balances[accountName] == nil {

@@ -410,14 +410,16 @@ func (p *Parser) parsePosting() *ast.Posting {
 		return nil
 	}
 
-	accountName := p.current.Value
+	originalName := p.current.Value
+	resolvedName := originalName
 	if prefix := p.getAccountPrefix(); prefix != "" {
-		accountName = prefix + ":" + accountName
+		resolvedName = prefix + ":" + originalName
 	}
 
 	posting.Account = ast.Account{
-		Name:  accountName,
-		Range: ast.Range{Start: toASTPosition(p.current.Pos), End: toASTPosition(p.current.End)},
+		Name:         originalName,
+		ResolvedName: resolvedName,
+		Range:        ast.Range{Start: toASTPosition(p.current.Pos), End: toASTPosition(p.current.End)},
 	}
 	p.advance()
 

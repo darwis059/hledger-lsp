@@ -947,3 +947,25 @@ func applyEdits(content string, edits []protocol.TextEdit) string {
 	}
 	return result
 }
+
+func TestFormatter_ApplyAccountPreservesOriginalNames(t *testing.T) {
+	input := `apply account business
+
+2024-01-15 Sale
+    revenue                                $100
+    checking
+
+end apply account
+`
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	// Format the posting
+	posting := &journal.Transactions[0].Postings[0]
+	result := FormatPosting(posting, 40)
+
+	// Formatting should preserve original name without prefix
+	assert.Contains(t, result, "revenue")
+	assert.NotContains(t, result, "business:revenue")
+}

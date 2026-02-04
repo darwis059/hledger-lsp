@@ -400,7 +400,7 @@ func collectDeclaredAccounts(journal *ast.Journal) map[string]bool {
 	declared := make(map[string]bool)
 	for _, dir := range journal.Directives {
 		if ad, ok := dir.(ast.AccountDirective); ok {
-			declared[ad.Account.Name] = true
+			declared[ad.Account.GetResolvedName()] = true
 		}
 	}
 	return declared
@@ -442,12 +442,12 @@ func isAccountDeclared(accountName string, declared map[string]bool) bool {
 func checkUndeclaredAccounts(tx *ast.Transaction, declared map[string]bool) []Diagnostic {
 	var diags []Diagnostic
 	for _, posting := range tx.Postings {
-		if !isAccountDeclared(posting.Account.Name, declared) {
+		if !isAccountDeclared(posting.Account.GetResolvedName(), declared) {
 			diags = append(diags, Diagnostic{
 				Range:    posting.Account.Range,
 				Severity: SeverityWarning,
 				Code:     "UNDECLARED_ACCOUNT",
-				Message:  fmt.Sprintf("account '%s' is not declared", posting.Account.Name),
+				Message:  fmt.Sprintf("account '%s' is not declared", posting.Account.GetResolvedName()),
 			})
 		}
 	}

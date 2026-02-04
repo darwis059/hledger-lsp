@@ -1790,8 +1790,14 @@ end apply account
 	require.Len(t, journal.Transactions, 1)
 
 	tx := journal.Transactions[0]
-	assert.Equal(t, "business:revenue", tx.Postings[0].Account.Name)
-	assert.Equal(t, "business:checking", tx.Postings[1].Account.Name)
+
+	// Original names should be preserved
+	assert.Equal(t, "revenue", tx.Postings[0].Account.Name)
+	assert.Equal(t, "checking", tx.Postings[1].Account.Name)
+
+	// Resolved names should have the prefix
+	assert.Equal(t, "business:revenue", tx.Postings[0].Account.ResolvedName)
+	assert.Equal(t, "business:checking", tx.Postings[1].Account.ResolvedName)
 }
 
 func TestParser_NestedApplyAccount(t *testing.T) {
@@ -1809,8 +1815,14 @@ end apply account
 	require.Empty(t, errs)
 
 	tx := journal.Transactions[0]
-	assert.Equal(t, "business:europe:revenue", tx.Postings[0].Account.Name)
-	assert.Equal(t, "business:europe:checking", tx.Postings[1].Account.Name)
+
+	// Original names preserved
+	assert.Equal(t, "revenue", tx.Postings[0].Account.Name)
+	assert.Equal(t, "checking", tx.Postings[1].Account.Name)
+
+	// Resolved names with nested prefixes
+	assert.Equal(t, "business:europe:revenue", tx.Postings[0].Account.ResolvedName)
+	assert.Equal(t, "business:europe:checking", tx.Postings[1].Account.ResolvedName)
 }
 
 func TestParser_ApplyAccountNoEnd(t *testing.T) {
@@ -1824,8 +1836,14 @@ func TestParser_ApplyAccountNoEnd(t *testing.T) {
 	require.Empty(t, errs) // NOT an error!
 
 	tx := journal.Transactions[0]
-	assert.Equal(t, "personal:expenses:food", tx.Postings[0].Account.Name)
-	assert.Equal(t, "personal:checking", tx.Postings[1].Account.Name)
+
+	// Original names preserved
+	assert.Equal(t, "expenses:food", tx.Postings[0].Account.Name)
+	assert.Equal(t, "checking", tx.Postings[1].Account.Name)
+
+	// Resolved names with prefix
+	assert.Equal(t, "personal:expenses:food", tx.Postings[0].Account.ResolvedName)
+	assert.Equal(t, "personal:checking", tx.Postings[1].Account.ResolvedName)
 }
 
 func TestParser_ApplyAccountComplex(t *testing.T) {
@@ -1862,28 +1880,38 @@ end apply account
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 5)
 
-	// Transaction 1: No prefix
+	// Transaction 1: No prefix (original = resolved)
 	tx := journal.Transactions[0]
 	assert.Equal(t, "revenue", tx.Postings[0].Account.Name)
 	assert.Equal(t, "checking", tx.Postings[1].Account.Name)
+	assert.Equal(t, "revenue", tx.Postings[0].Account.ResolvedName)
+	assert.Equal(t, "checking", tx.Postings[1].Account.ResolvedName)
 
 	// Transaction 2: business prefix
 	tx = journal.Transactions[1]
-	assert.Equal(t, "business:revenue", tx.Postings[0].Account.Name)
-	assert.Equal(t, "business:checking", tx.Postings[1].Account.Name)
+	assert.Equal(t, "revenue", tx.Postings[0].Account.Name)
+	assert.Equal(t, "checking", tx.Postings[1].Account.Name)
+	assert.Equal(t, "business:revenue", tx.Postings[0].Account.ResolvedName)
+	assert.Equal(t, "business:checking", tx.Postings[1].Account.ResolvedName)
 
 	// Transaction 3: business:europe prefix
 	tx = journal.Transactions[2]
-	assert.Equal(t, "business:europe:revenue", tx.Postings[0].Account.Name)
-	assert.Equal(t, "business:europe:checking", tx.Postings[1].Account.Name)
+	assert.Equal(t, "revenue", tx.Postings[0].Account.Name)
+	assert.Equal(t, "checking", tx.Postings[1].Account.Name)
+	assert.Equal(t, "business:europe:revenue", tx.Postings[0].Account.ResolvedName)
+	assert.Equal(t, "business:europe:checking", tx.Postings[1].Account.ResolvedName)
 
 	// Transaction 4: back to business prefix
 	tx = journal.Transactions[3]
-	assert.Equal(t, "business:revenue", tx.Postings[0].Account.Name)
-	assert.Equal(t, "business:checking", tx.Postings[1].Account.Name)
+	assert.Equal(t, "revenue", tx.Postings[0].Account.Name)
+	assert.Equal(t, "checking", tx.Postings[1].Account.Name)
+	assert.Equal(t, "business:revenue", tx.Postings[0].Account.ResolvedName)
+	assert.Equal(t, "business:checking", tx.Postings[1].Account.ResolvedName)
 
-	// Transaction 5: no prefix
+	// Transaction 5: no prefix again
 	tx = journal.Transactions[4]
 	assert.Equal(t, "revenue", tx.Postings[0].Account.Name)
 	assert.Equal(t, "checking", tx.Postings[1].Account.Name)
+	assert.Equal(t, "revenue", tx.Postings[0].Account.ResolvedName)
+	assert.Equal(t, "checking", tx.Postings[1].Account.ResolvedName)
 }

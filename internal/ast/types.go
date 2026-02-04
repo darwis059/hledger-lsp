@@ -92,8 +92,17 @@ const (
 )
 
 type Account struct {
-	Name  string
-	Range Range
+	Name         string // Original name from file (for formatting)
+	ResolvedName string // Full name with apply account prefix (for validation)
+	Range        Range
+}
+
+// GetResolvedName returns ResolvedName if set, otherwise Name
+func (a Account) GetResolvedName() string {
+	if a.ResolvedName != "" {
+		return a.ResolvedName
+	}
+	return a.Name
 }
 
 type Amount struct {

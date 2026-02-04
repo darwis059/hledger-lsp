@@ -14,13 +14,13 @@ func CollectAccounts(journal *ast.Journal) *AccountIndex {
 
 	for _, dir := range journal.Directives {
 		if accDir, ok := dir.(ast.AccountDirective); ok {
-			addAccount(idx, seen, accDir.Account.Name)
+			addAccount(idx, seen, accDir.Account.GetResolvedName())
 		}
 	}
 
 	for _, tx := range journal.Transactions {
 		for _, posting := range tx.Postings {
-			addAccount(idx, seen, posting.Account.Name)
+			addAccount(idx, seen, posting.Account.GetResolvedName())
 		}
 	}
 
@@ -150,7 +150,7 @@ func CollectPayeeTemplates(journal *ast.Journal) map[string][]PostingTemplate {
 		var accounts []string
 		for _, p := range tx.Postings {
 			pt := PostingTemplate{
-				Account: p.Account.Name,
+				Account: p.Account.GetResolvedName(),
 			}
 			if p.Amount != nil {
 				pt.Amount = p.Amount.RawQuantity
@@ -161,7 +161,7 @@ func CollectPayeeTemplates(journal *ast.Journal) map[string][]PostingTemplate {
 				pt.CommodityLeft = p.Amount.Commodity.Position == ast.CommodityLeft
 			}
 			postings = append(postings, pt)
-			accounts = append(accounts, p.Account.Name)
+			accounts = append(accounts, p.Account.GetResolvedName())
 		}
 
 		sort.Strings(accounts)
@@ -290,8 +290,8 @@ func CollectAccountCounts(journal *ast.Journal) map[string]int {
 	counts := make(map[string]int)
 	for _, tx := range journal.Transactions {
 		for _, posting := range tx.Postings {
-			if posting.Account.Name != "" {
-				counts[posting.Account.Name]++
+			if posting.Account.GetResolvedName() != "" {
+				counts[posting.Account.GetResolvedName()]++
 			}
 		}
 	}
