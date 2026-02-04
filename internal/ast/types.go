@@ -171,6 +171,40 @@ type DefaultCommodityDirective struct {
 func (DefaultCommodityDirective) directive()        {}
 func (d DefaultCommodityDirective) GetRange() Range { return d.Range }
 
+type DecimalMarkDirective struct {
+	Mark  string
+	Range Range
+}
+
+func (DecimalMarkDirective) directive()        {}
+func (d DecimalMarkDirective) GetRange() Range { return d.Range }
+
+type PayeeDirective struct {
+	Name  string
+	Range Range
+}
+
+func (PayeeDirective) directive()        {}
+func (d PayeeDirective) GetRange() Range { return d.Range }
+
+type TagDirective struct {
+	Name  string
+	Range Range
+}
+
+func (TagDirective) directive()        {}
+func (d TagDirective) GetRange() Range { return d.Range }
+
+type AliasDirective struct {
+	Original string
+	Alias    string
+	IsRegex  bool
+	Range    Range
+}
+
+func (AliasDirective) directive()        {}
+func (d AliasDirective) GetRange() Range { return d.Range }
+
 type Comment struct {
 	Text  string
 	Tags  []Tag

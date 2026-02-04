@@ -112,6 +112,10 @@ func (l *Lexer) scanInLine() Token {
 	case l.isCurrencySymbol(r):
 		return l.scanCurrencySymbol()
 	case ch == '"':
+		// Header line: quotes are part of description
+		if l.inTransaction && !l.onPostingLine && !l.afterIndent {
+			return l.scanText()
+		}
 		return l.scanQuotedCommodity()
 	case ch == '-' || ch == '+':
 		if l.nextIsCurrencySymbol() || l.nextIsLetterCommodity() || l.nextIsDigit() {
@@ -122,8 +126,16 @@ func (l *Lexer) scanInLine() Token {
 		if l.looksLikeDate() {
 			return l.scanDate()
 		}
+		// Header line: digits are part of description
+		if l.inTransaction && !l.onPostingLine && !l.afterIndent {
+			return l.scanText()
+		}
 		return l.scanNumber()
 	case l.isAccountStart(ch) || l.isAccountStartRune(r):
+		// Header line: letters are part of description
+		if l.inTransaction && !l.onPostingLine && !l.afterIndent {
+			return l.scanText()
+		}
 		// afterIndent = true → subdirective line or posting line
 		if l.afterIndent {
 			if l.inDirective {
@@ -133,10 +145,18 @@ func (l *Lexer) scanInLine() Token {
 		}
 		// After sign or number → Commodity (amount context)
 		if l.afterSign || l.afterNumber {
+			// Check for multi-char currency (AU$, CA$, etc.)
+			if l.looksLikeMultiCharCurrency() {
+				return l.scanMultiCharCurrency()
+			}
 			return l.scanCommodityOrText()
 		}
 		// Posting line after account → Commodity (even if not in transaction)
 		if l.onPostingLine {
+			// Check for multi-char currency (AU$, CA$, etc.)
+			if l.looksLikeMultiCharCurrency() {
+				return l.scanMultiCharCurrency()
+			}
 			return l.scanCommodityOrText()
 		}
 		// In directive context → check if it's an account, otherwise single-word argument
@@ -348,6 +368,23 @@ func (l *Lexer) scanCurrencySymbol() Token {
 	return Token{Type: TokenCommodity, Value: string(r), Pos: startPos, End: l.position()}
 }
 
+func (l *Lexer) scanMultiCharCurrency() Token {
+	startPos := l.position()
+
+	// Scan 2 uppercase letters
+	prefix := l.input[l.pos : l.pos+2]
+	l.pos += 2
+	l.column += 2
+
+	// Scan the currency symbol
+	r, size := utf8.DecodeRuneInString(l.input[l.pos:])
+	l.pos += size
+	l.column++
+
+	value := prefix + string(r)
+	return Token{Type: TokenCommodity, Value: value, Pos: startPos, End: l.position()}
+}
+
 func (l *Lexer) scanQuotedCommodity() Token {
 	startPos := l.position()
 	l.advance()
@@ -405,6 +442,29 @@ func (l *Lexer) scanDirectiveOrAccount() Token {
 		l.afterIndent = false
 		l.inDirective = true // Set directive context
 		return Token{Type: TokenDirective, Value: word, Pos: startPos, End: l.position()}
+	}
+
+	// Check for multi-word directives with hyphens (e.g., "decimal-mark")
+	if l.peek() == '-' {
+		tempPos := l.pos
+		tempCol := l.column
+		l.advance() // skip hyphen
+
+		// Scan the rest of the word
+		for l.pos < len(l.input) && l.isLetter(l.peek()) {
+			l.advance()
+		}
+
+		potentialDirective := l.input[start:l.pos]
+		if isDirective(potentialDirective) {
+			l.afterIndent = false
+			l.inDirective = true
+			return Token{Type: TokenDirective, Value: potentialDirective, Pos: startPos, End: l.position()}
+		}
+
+		// Not a directive, reset position
+		l.pos = tempPos
+		l.column = tempCol
 	}
 
 	// If not a directive, continue scanning with digits for potential account
@@ -598,6 +658,10 @@ func (l *Lexer) isLetter(ch byte) bool {
 	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
 }
 
+func isUpperASCII(ch byte) bool {
+	return ch >= 'A' && ch <= 'Z'
+}
+
 func (l *Lexer) isAccountStart(ch byte) bool {
 	return l.isLetter(ch)
 }
@@ -608,6 +672,20 @@ func (l *Lexer) isAccountStartRune(r rune) bool {
 
 func (l *Lexer) isCurrencySymbol(r rune) bool {
 	return r == '$' || r == '€' || r == '£' || r == '¥' || r == '₽' || r == '₴'
+}
+
+func (l *Lexer) looksLikeMultiCharCurrency() bool {
+	if l.pos+3 > len(l.input) {
+		return false
+	}
+
+	// Check for 2 uppercase ASCII letters followed by currency symbol
+	if !isUpperASCII(l.input[l.pos]) || !isUpperASCII(l.input[l.pos+1]) {
+		return false
+	}
+
+	r, _ := utf8.DecodeRuneInString(l.input[l.pos+2:])
+	return l.isCurrencySymbol(r)
 }
 
 func (l *Lexer) nextIsCurrencySymbol() bool {
@@ -691,6 +769,11 @@ func (l *Lexer) looksLikeAccount() bool {
 }
 
 func (l *Lexer) looksLikeDate() bool {
+	// On posting line, numbers are amounts, not dates
+	if l.onPostingLine {
+		return false
+	}
+
 	// Date format: YYYY-MM-DD (minimum 8 chars for YYYY-M-D, typical 10 for YYYY-MM-DD)
 	// We require a SECOND separator to distinguish from numbers like 1000.00
 	if l.pos+8 > len(l.input) {

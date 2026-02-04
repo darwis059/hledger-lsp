@@ -435,6 +435,14 @@ func (p *Parser) parseDirective() ast.Directive {
 		return p.parseYearDirective(pos)
 	case "D":
 		return p.parseDefaultCommodityDirective(pos)
+	case "decimal-mark":
+		return p.parseDecimalMarkDirective(pos)
+	case "payee":
+		return p.parsePayeeDirective(pos)
+	case "tag":
+		return p.parseTagDirective(pos)
+	case "alias":
+		return p.parseAliasDirective(pos)
 	default:
 		p.skipToNextLine()
 		return nil
@@ -691,6 +699,141 @@ func (p *Parser) parseDefaultCommodityDirective(startPos Position) ast.Directive
 
 	dir.Range.End = toASTPosition(p.current.Pos)
 	p.skipToNextLine()
+	return dir
+}
+
+func (p *Parser) parseDecimalMarkDirective(startPos Position) ast.Directive {
+	dir := ast.DecimalMarkDirective{
+		Range: ast.Range{Start: toASTPosition(startPos)},
+	}
+
+	if p.current.Type != TokenText && p.current.Type != TokenCommodity {
+		p.error("expected decimal mark (. or ,)")
+		p.skipToNextLine()
+		return nil
+	}
+
+	mark := strings.TrimSpace(p.current.Value)
+	if mark != "." && mark != "," {
+		p.error("decimal mark must be . or ,")
+		p.skipToNextLine()
+		return nil
+	}
+
+	dir.Mark = mark
+	p.advance()
+
+	dir.Range.End = toASTPosition(p.current.Pos)
+	p.skipToNextLine()
+	return dir
+}
+
+func (p *Parser) parsePayeeDirective(startPos Position) ast.Directive {
+	dir := ast.PayeeDirective{
+		Range: ast.Range{Start: toASTPosition(startPos)},
+	}
+
+	// Collect all tokens until newline to form the payee name
+	var parts []string
+	for p.current.Type != TokenNewline && p.current.Type != TokenEOF && p.current.Type != TokenComment {
+		if p.current.Type == TokenText || p.current.Type == TokenAccount {
+			parts = append(parts, p.current.Value)
+		}
+		p.advance()
+	}
+
+	if len(parts) == 0 {
+		p.error("expected payee name")
+		return nil
+	}
+
+	dir.Name = strings.Join(parts, " ")
+	dir.Range.End = toASTPosition(p.current.Pos)
+	return dir
+}
+
+func (p *Parser) parseTagDirective(startPos Position) ast.Directive {
+	dir := ast.TagDirective{
+		Range: ast.Range{Start: toASTPosition(startPos)},
+	}
+
+	if p.current.Type != TokenText && p.current.Type != TokenAccount {
+		p.error("expected tag name")
+		p.skipToNextLine()
+		return nil
+	}
+
+	dir.Name = strings.TrimSpace(p.current.Value)
+	p.advance()
+
+	dir.Range.End = toASTPosition(p.current.Pos)
+	p.skipToNextLine()
+	return dir
+}
+
+func (p *Parser) parseAliasDirective(startPos Position) ast.Directive {
+	dir := ast.AliasDirective{
+		Range: ast.Range{Start: toASTPosition(startPos)},
+	}
+
+	// Collect tokens until we hit '=' sign
+	var originalParts []string
+	isRegex := false
+
+	for p.current.Type != TokenEquals && p.current.Type != TokenNewline && p.current.Type != TokenEOF {
+		switch p.current.Type {
+		case TokenText, TokenAccount, TokenNumber:
+			originalParts = append(originalParts, p.current.Value)
+		case TokenColon:
+			originalParts = append(originalParts, ":")
+		}
+		p.advance()
+	}
+
+	if len(originalParts) == 0 {
+		p.error("expected alias pattern or name")
+		p.skipToNextLine()
+		return nil
+	}
+
+	original := strings.Join(originalParts, "")
+	// Check if it's a regex pattern (starts and ends with /)
+	if strings.HasPrefix(original, "/") && strings.HasSuffix(original, "/") {
+		isRegex = true
+		// Remove leading and trailing slashes
+		original = original[1 : len(original)-1]
+	}
+
+	dir.Original = strings.TrimSpace(original)
+	dir.IsRegex = isRegex
+
+	// Expect '=' sign
+	if p.current.Type != TokenEquals {
+		p.error("expected = in alias directive")
+		p.skipToNextLine()
+		return nil
+	}
+	p.advance()
+
+	// Parse the replacement/alias - collect all remaining tokens until newline
+	var aliasParts []string
+	for p.current.Type != TokenNewline && p.current.Type != TokenEOF && p.current.Type != TokenComment {
+		switch p.current.Type {
+		case TokenText, TokenAccount, TokenNumber:
+			aliasParts = append(aliasParts, p.current.Value)
+		case TokenColon:
+			aliasParts = append(aliasParts, ":")
+		}
+		p.advance()
+	}
+
+	if len(aliasParts) == 0 {
+		p.error("expected alias replacement")
+		return nil
+	}
+
+	dir.Alias = strings.Join(aliasParts, "")
+	dir.Range.End = toASTPosition(p.current.Pos)
 	return dir
 }
 

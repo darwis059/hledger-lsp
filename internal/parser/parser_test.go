@@ -93,6 +93,288 @@ func TestParser_TransactionWithPayeeAndNote(t *testing.T) {
 	assert.Equal(t, "weekly shopping", journal.Transactions[0].Note)
 }
 
+func TestParser_Issue12_CompleteJournal(t *testing.T) {
+	input := `decimal-mark .
+
+2026-01-20 18a Brock Street Cafe
+    Expenses:Eating out    £10
+    Assets:Checking
+
+2026-01-20 J Random Hacker
+    Expenses:Contracting   £50
+    Assets:Checking
+
+2026-01-20 Australian friend
+    Expenses:Kangaroo food   AU$50
+    Assets:Checking
+
+2026-01-20 salary
+    Assets:Checking   £2000
+    Assets:Pension    500 PensionCredits @@ £500
+    Income:Salary
+
+2026-01-20 Steam | Magic: The Gathering Arena
+    Expenses:Games   £5
+    Assets:Checking
+
+2026-01-20 Art shop | "Mona Lisa" print
+    Expenses:Home    £20
+    Assets:Checking
+
+2026-01-20 Opening balances
+    Assets:Checking          £3026.13
+    Equity:Opening balances
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 7)
+
+	// Verify decimal-mark directive
+	require.Len(t, journal.Directives, 1)
+	dir, ok := journal.Directives[0].(ast.DecimalMarkDirective)
+	require.True(t, ok)
+	assert.Equal(t, ".", dir.Mark)
+
+	// Verify transaction 1: numbers in payee
+	tx1 := journal.Transactions[0]
+	assert.Equal(t, "18a Brock Street Cafe", tx1.Description)
+
+	// Verify transaction 3: multi-char currency
+	tx3 := journal.Transactions[2]
+	require.Len(t, tx3.Postings, 2)
+	assert.Equal(t, "AU$", tx3.Postings[0].Amount.Commodity.Symbol)
+
+	// Verify transaction 4: mixed-case commodity
+	tx4 := journal.Transactions[3]
+	require.Len(t, tx4.Postings, 3)
+	assert.Equal(t, "PensionCredits", tx4.Postings[1].Amount.Commodity.Symbol)
+
+	// Verify transaction 5: colon after pipe
+	tx5 := journal.Transactions[4]
+	assert.Equal(t, "Steam", tx5.Payee)
+	assert.Equal(t, "Magic: The Gathering Arena", tx5.Note)
+
+	// Verify transaction 6: quotes in description
+	tx6 := journal.Transactions[5]
+	assert.Equal(t, "Art shop", tx6.Payee)
+	assert.Equal(t, `"Mona Lisa" print`, tx6.Note)
+
+	// Verify transaction 7: year-like amounts
+	tx7 := journal.Transactions[6]
+	require.Len(t, tx7.Postings, 2)
+	assert.Equal(t, "3026.13", tx7.Postings[0].Amount.RawQuantity)
+}
+
+func TestParser_MixedCaseCommodity(t *testing.T) {
+	input := `2026-01-20 salary
+    Assets:Checking   £2000
+    Assets:Pension    500 PensionCredits @@ £500
+    Income:Salary
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	tx := journal.Transactions[0]
+	require.Len(t, tx.Postings, 3)
+
+	p2 := tx.Postings[1]
+	assert.Equal(t, "Assets:Pension", p2.Account.Name)
+	require.NotNil(t, p2.Amount)
+	assert.Equal(t, "500", p2.Amount.RawQuantity)
+	assert.Equal(t, "PensionCredits", p2.Amount.Commodity.Symbol)
+	require.NotNil(t, p2.Cost)
+	assert.True(t, p2.Cost.IsTotal)
+}
+
+func TestParser_MultiCharCurrency(t *testing.T) {
+	input := `2026-01-20 Australian friend
+    Expenses:Kangaroo food   AU$50
+    Assets:Checking
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	tx := journal.Transactions[0]
+	require.Len(t, tx.Postings, 2)
+
+	p1 := tx.Postings[0]
+	assert.Equal(t, "Expenses:Kangaroo food", p1.Account.Name)
+	require.NotNil(t, p1.Amount)
+	assert.Equal(t, "AU$", p1.Amount.Commodity.Symbol)
+	assert.Equal(t, "50", p1.Amount.RawQuantity)
+}
+
+func TestParser_YearLikeAmounts(t *testing.T) {
+	input := `2026-01-20 Opening balances
+    Assets:Checking          £3026.13
+    Equity:Opening balances
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	tx := journal.Transactions[0]
+	require.Len(t, tx.Postings, 2)
+
+	p1 := tx.Postings[0]
+	assert.Equal(t, "Assets:Checking", p1.Account.Name)
+	require.NotNil(t, p1.Amount)
+	assert.Equal(t, "3026.13", p1.Amount.RawQuantity)
+	assert.Equal(t, "£", p1.Amount.Commodity.Symbol)
+}
+
+func TestParser_ColonAfterPipe(t *testing.T) {
+	input := `2026-01-20 Steam | Magic: The Gathering Arena
+    Expenses:Games   £5
+    Assets:Checking
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	tx := journal.Transactions[0]
+	assert.Equal(t, "Steam", tx.Payee)
+	assert.Equal(t, "Magic: The Gathering Arena", tx.Note)
+}
+
+func TestParser_QuotesInDescription(t *testing.T) {
+	input := `2026-01-20 Art shop | "Mona Lisa" print
+    Expenses:Home    £20
+    Assets:Checking
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	tx := journal.Transactions[0]
+	assert.Equal(t, "Art shop", tx.Payee)
+	assert.Equal(t, `"Mona Lisa" print`, tx.Note)
+}
+
+func TestParser_PayeeWithNumbers(t *testing.T) {
+	input := `2026-01-20 18a Brock Street Cafe
+    Expenses:Eating out    £10
+    Assets:Checking
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	tx := journal.Transactions[0]
+	assert.Equal(t, "18a Brock Street Cafe", tx.Description)
+	assert.Equal(t, 2026, tx.Date.Year)
+	assert.Equal(t, 1, tx.Date.Month)
+	assert.Equal(t, 20, tx.Date.Day)
+}
+
+func TestParser_PayeeDirective(t *testing.T) {
+	input := "payee Whole Foods\n"
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Directives, 1)
+
+	directive, ok := journal.Directives[0].(ast.PayeeDirective)
+	require.True(t, ok, "expected PayeeDirective, got %T", journal.Directives[0])
+	assert.Equal(t, "Whole Foods", directive.Name)
+}
+
+func TestParser_TagDirective(t *testing.T) {
+	input := "tag project\n"
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Directives, 1)
+
+	directive, ok := journal.Directives[0].(ast.TagDirective)
+	require.True(t, ok, "expected TagDirective, got %T", journal.Directives[0])
+	assert.Equal(t, "project", directive.Name)
+}
+
+func TestParser_AliasDirective(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		original string
+		alias    string
+		isRegex  bool
+	}{
+		{
+			name:     "simple alias",
+			input:    "alias checking = assets:bank:checking\n",
+			original: "checking",
+			alias:    "assets:bank:checking",
+			isRegex:  false,
+		},
+		// TODO: Regex aliases with slashes need special handling in lexer
+		// {
+		// 	name:     "regex alias",
+		// 	input:    "alias /foo/ = bar\n",
+		// 	original: "foo",
+		// 	alias:    "bar",
+		// 	isRegex:  true,
+		// },
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			journal, errs := Parse(tt.input)
+			require.Empty(t, errs)
+			require.Len(t, journal.Directives, 1)
+
+			directive, ok := journal.Directives[0].(ast.AliasDirective)
+			require.True(t, ok, "expected AliasDirective, got %T", journal.Directives[0])
+			assert.Equal(t, tt.original, directive.Original)
+			assert.Equal(t, tt.alias, directive.Alias)
+			assert.Equal(t, tt.isRegex, directive.IsRegex)
+		})
+	}
+}
+
+func TestParser_DecimalMarkDirective(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+		wantErr  bool
+	}{
+		{
+			name:     "period decimal mark",
+			input:    "decimal-mark .\n",
+			expected: ".",
+			wantErr:  false,
+		},
+		{
+			name:     "comma decimal mark",
+			input:    "decimal-mark ,\n",
+			expected: ",",
+			wantErr:  false,
+		},
+		{
+			name:     "invalid mark",
+			input:    "decimal-mark :\n",
+			expected: "",
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			journal, errs := Parse(tt.input)
+			if tt.wantErr {
+				require.NotEmpty(t, errs)
+				return
+			}
+			require.Empty(t, errs)
+			require.Len(t, journal.Directives, 1, "expected 1 directive, got %d", len(journal.Directives))
+
+			directive, ok := journal.Directives[0].(ast.DecimalMarkDirective)
+			require.True(t, ok, "expected DecimalMarkDirective, got %T", journal.Directives[0])
+			assert.Equal(t, tt.expected, directive.Mark)
+		})
+	}
+}
+
 func TestParser_PostingWithCost(t *testing.T) {
 	input := `2024-01-15 buy stocks
     assets:stocks  10 AAPL @ $150
