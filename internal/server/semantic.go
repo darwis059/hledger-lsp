@@ -31,7 +31,9 @@ const (
 	TokenTypeOperator = 11
 
 	// Additional custom types
-	TokenTypeTagValue = 12
+	TokenTypeTagValue       = 12
+	TokenTypeAccountVirtual = 13
+	TokenTypeNote           = 14
 )
 
 const (
@@ -68,6 +70,8 @@ func GetSemanticTokensLegend() protocol.SemanticTokensLegend {
 			protocol.SemanticTokenOperator,
 			// Additional custom types (index 12+)
 			"tagValue",
+			"accountVirtual",
+			"note",
 		},
 		TokenModifiers: []protocol.SemanticTokenModifiers{
 			protocol.SemanticTokenModifierDeclaration,
@@ -272,6 +276,9 @@ func tokenizeForSemantics(content string) []semanticToken {
 	directiveType := ""
 	isPayee := false
 	currentLine := -1
+	inVirtualContext := false
+	seenPipe := false
+	isTransactionHeader := false
 
 	for {
 		tok := lexer.Next()
@@ -281,6 +288,9 @@ func tokenizeForSemantics(content string) []semanticToken {
 
 		if tok.Pos.Line != currentLine {
 			currentLine = tok.Pos.Line
+			inVirtualContext = false
+			seenPipe = false
+			isTransactionHeader = false
 			if tok.Type == parser.TokenDirective {
 				inDirective = true
 				directiveType = tok.Value
@@ -288,10 +298,25 @@ func tokenizeForSemantics(content string) []semanticToken {
 				inDirective = false
 				directiveType = ""
 				isPayee = true
+				isTransactionHeader = true
 			} else if tok.Type != parser.TokenIndent && tok.Type != parser.TokenNewline {
 				inDirective = false
 				directiveType = ""
 			}
+		}
+
+		// Track virtual account context
+		switch tok.Type {
+		case parser.TokenLParen, parser.TokenLBracket:
+			inVirtualContext = true
+		case parser.TokenRParen, parser.TokenRBracket:
+			inVirtualContext = false
+		}
+
+		// Track pipe separator on transaction header line
+		if tok.Type == parser.TokenPipe && isTransactionHeader {
+			seenPipe = true
+			isPayee = false
 		}
 
 		semType, ok := mapTokenType(tok.Type)
@@ -306,9 +331,19 @@ func tokenizeForSemantics(content string) []semanticToken {
 			}
 		}
 
-		if tok.Type == parser.TokenText && isPayee {
-			semType = TokenTypePayee
-			isPayee = false
+		// Handle virtual accounts
+		if tok.Type == parser.TokenAccount && inVirtualContext {
+			semType = TokenTypeAccountVirtual
+		}
+
+		// Handle transaction header: payee and note
+		if tok.Type == parser.TokenText && isTransactionHeader {
+			if isPayee && !seenPipe {
+				semType = TokenTypePayee
+				isPayee = false
+			} else if seenPipe {
+				semType = TokenTypeNote
+			}
 		}
 
 		// Handle comments with tags - extract tag tokens

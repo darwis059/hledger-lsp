@@ -511,3 +511,140 @@ func TestSemanticTokens_TagNameAndValueSeparate(t *testing.T) {
 		})
 	}
 }
+
+func TestSemanticTokens_VirtualAccounts(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		wantType uint32
+	}{
+		{
+			name: "balanced virtual account with parentheses",
+			content: `2024-01-15 test
+    (tracking:virtual)  $100`,
+			wantType: TokenTypeAccountVirtual,
+		},
+		{
+			name: "unbalanced virtual account with brackets",
+			content: `2024-01-15 test
+    [budget:food]  $-100`,
+			wantType: TokenTypeAccountVirtual,
+		},
+		{
+			name: "mixed regular and virtual accounts",
+			content: `2024-01-15 test
+    expenses:food  $50
+    (tracking:virtual)  $100`,
+			wantType: TokenTypeAccountVirtual,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeForSemantics(tt.content)
+			require.NotEmpty(t, tokens)
+
+			found := false
+			for _, tok := range tokens {
+				if tok.tokenType == tt.wantType {
+					found = true
+					break
+				}
+			}
+			assert.True(t, found, "expected virtual account token type %d not found", tt.wantType)
+		})
+	}
+}
+
+func TestSemanticTokens_Note(t *testing.T) {
+	tests := []struct {
+		name         string
+		content      string
+		wantPayee    bool
+		wantNote     bool
+		wantNoteText string
+	}{
+		{
+			name:         "transaction with payee and note",
+			content:      "2024-01-15 Whole Foods | Groceries for party",
+			wantPayee:    true,
+			wantNote:     true,
+			wantNoteText: "Groceries for party",
+		},
+		{
+			name:      "transaction with only payee",
+			content:   "2024-01-15 Whole Foods",
+			wantPayee: true,
+			wantNote:  false,
+		},
+		{
+			name:         "transaction with note but no payee",
+			content:      "2024-01-15 | Just a note",
+			wantPayee:    false,
+			wantNote:     true,
+			wantNoteText: "Just a note",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeForSemantics(tt.content)
+			require.NotEmpty(t, tokens)
+
+			foundPayee := false
+			foundNote := false
+			for _, tok := range tokens {
+				if tok.tokenType == TokenTypePayee {
+					foundPayee = true
+				}
+				if tok.tokenType == TokenTypeNote {
+					foundNote = true
+				}
+			}
+
+			assert.Equal(t, tt.wantPayee, foundPayee, "payee token mismatch")
+			assert.Equal(t, tt.wantNote, foundNote, "note token mismatch")
+		})
+	}
+}
+
+func TestSemanticTokens_CompleteExample(t *testing.T) {
+	content := `2024-01-15 Whole Foods | Groceries for party
+    (tracking:virtual)    $100
+    [budget:food]         $-100
+    expenses:food          $50
+    assets:cash`
+
+	tokens := tokenizeForSemantics(content)
+	require.NotEmpty(t, tokens)
+
+	// Count different token types
+	var (
+		foundDate           bool
+		foundPayee          bool
+		foundNote           bool
+		foundVirtual        int
+		foundRegularAccount int
+	)
+
+	for _, tok := range tokens {
+		switch tok.tokenType {
+		case TokenTypeDate:
+			foundDate = true
+		case TokenTypePayee:
+			foundPayee = true
+		case TokenTypeNote:
+			foundNote = true
+		case TokenTypeAccountVirtual:
+			foundVirtual++
+		case TokenTypeAccount:
+			foundRegularAccount++
+		}
+	}
+
+	assert.True(t, foundDate, "expected date token")
+	assert.True(t, foundPayee, "expected payee token")
+	assert.True(t, foundNote, "expected note token")
+	assert.Equal(t, 2, foundVirtual, "expected 2 virtual account tokens")
+	assert.Equal(t, 2, foundRegularAccount, "expected 2 regular account tokens")
+}
