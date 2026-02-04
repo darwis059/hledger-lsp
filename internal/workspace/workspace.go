@@ -457,12 +457,27 @@ func (w *Workspace) GetCommodityFormats() map[string]formatter.NumberFormat {
 	}
 
 	formats := make(map[string]formatter.NumberFormat)
+	var defaultFormat *formatter.NumberFormat
+
 	for _, dir := range w.resolved.AllDirectives() {
-		if cd, ok := dir.(ast.CommodityDirective); ok {
-			if cd.Format != "" {
-				formats[cd.Commodity.Symbol] = formatter.ParseNumberFormat(cd.Format)
+		switch d := dir.(type) {
+		case ast.CommodityDirective:
+			if d.Format != "" {
+				formats[d.Commodity.Symbol] = formatter.ParseNumberFormat(d.Format)
+			}
+		case ast.DefaultCommodityDirective:
+			if d.Format != "" {
+				nf := formatter.ParseNumberFormat(d.Format)
+				defaultFormat = &nf
+				if d.Symbol != "" {
+					formats[d.Symbol] = nf
+				}
 			}
 		}
+	}
+
+	if defaultFormat != nil {
+		formats[""] = *defaultFormat
 	}
 
 	w.cachedFormats = formats

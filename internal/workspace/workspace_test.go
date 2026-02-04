@@ -687,3 +687,46 @@ func TestWorkspace_IndexSnapshot_PayeeTemplates(t *testing.T) {
 	assert.Equal(t, "expenses:food", groceryPostings[0].Account)
 	assert.Equal(t, "assets:cash", groceryPostings[1].Account)
 }
+
+func TestWorkspace_GetCommodityFormats_WithDefaultDirective(t *testing.T) {
+	t.Setenv("LEDGER_FILE", "")
+	t.Setenv("HLEDGER_JOURNAL", "")
+
+	tmpDir := t.TempDir()
+
+	mainPath := filepath.Join(tmpDir, "main.journal")
+	mainContent := `commodity RUB
+  format 1.000,00 RUB
+
+D 1.000,00 RUB
+
+include transactions.journal`
+	err := os.WriteFile(mainPath, []byte(mainContent), 0644)
+	require.NoError(t, err)
+
+	txPath := filepath.Join(tmpDir, "transactions.journal")
+	err = os.WriteFile(txPath, []byte(""), 0644)
+	require.NoError(t, err)
+
+	loader := include.NewLoader()
+	ws := NewWorkspace(tmpDir, loader)
+
+	err = ws.Initialize()
+	require.NoError(t, err)
+
+	formats := ws.GetCommodityFormats()
+	require.NotNil(t, formats)
+
+	// Check RUB format from commodity directive
+	rubFormat, ok := formats["RUB"]
+	assert.True(t, ok, "RUB format should exist")
+	assert.Equal(t, ',', rubFormat.DecimalMark)
+	assert.Equal(t, ".", rubFormat.ThousandsSep)
+
+	// Check default format from D directive
+	defaultFormat, ok := formats[""]
+	assert.True(t, ok, "default format should exist from D directive")
+	assert.Equal(t, ',', defaultFormat.DecimalMark)
+	assert.Equal(t, ".", defaultFormat.ThousandsSep)
+	assert.Equal(t, 2, defaultFormat.DecimalPlaces)
+}
