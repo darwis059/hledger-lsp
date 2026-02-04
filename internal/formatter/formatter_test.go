@@ -519,8 +519,8 @@ func TestFormatDocumentWithOptions_MinAlignmentColumn(t *testing.T) {
 		pos1 := findAmountPosition(edits[0].NewText)
 		pos2 := findAmountPosition(edits[1].NewText)
 
-		assert.Equal(t, 50, pos1, "amount should be at minimum column 50")
-		assert.Equal(t, 50, pos2, "amount should be at minimum column 50")
+		assert.Equal(t, 49, pos1, "amount should be at column 50 (0-indexed: 49)")
+		assert.Equal(t, 49, pos2, "amount should be at column 50 (0-indexed: 49)")
 	})
 
 	t.Run("min alignment column smaller than auto uses auto", func(t *testing.T) {

@@ -57,8 +57,8 @@ func FormatDocumentWithOptions(journal *ast.Journal, content string, commodityFo
 		globalAccountCol := 0
 		if opts.AlignAmounts {
 			globalAccountCol = calculateGlobalAlignmentColumnWithIndent(journal.Transactions, opts.IndentSize)
-			if opts.MinAlignmentColumn > 0 && globalAccountCol < opts.MinAlignmentColumn {
-				globalAccountCol = opts.MinAlignmentColumn
+			if opts.MinAlignmentColumn > 0 && globalAccountCol < opts.MinAlignmentColumn-1 {
+				globalAccountCol = opts.MinAlignmentColumn - 1
 			}
 		}
 
