@@ -192,6 +192,48 @@ func TestParseSettingsFromRaw_Formatting(t *testing.T) {
 	}
 }
 
+func TestParseSettingsFromRaw_Formatting_AmountAlignmentColumn(t *testing.T) {
+	base := defaultServerSettings()
+
+	raw := map[string]interface{}{
+		"formatting": map[string]interface{}{
+			"indentSize":            2,
+			"alignAmounts":          true,
+			"amountAlignmentColumn": 45,
+		},
+	}
+
+	result := parseSettingsFromRaw(base, raw)
+
+	if result.Formatting.IndentSize != 2 {
+		t.Errorf("Formatting.IndentSize = %d, want 2", result.Formatting.IndentSize)
+	}
+	if !result.Formatting.AlignAmounts {
+		t.Error("Formatting.AlignAmounts should be true")
+	}
+	if result.Formatting.MinAlignmentColumn != 45 {
+		t.Errorf("Formatting.MinAlignmentColumn = %d, want 45 (from amountAlignmentColumn)", result.Formatting.MinAlignmentColumn)
+	}
+}
+
+func TestParseSettingsFromRaw_Formatting_FlatAmountAlignmentColumn(t *testing.T) {
+	base := defaultServerSettings()
+
+	raw := map[string]interface{}{
+		"formatting.indentSize":            8,
+		"formatting.amountAlignmentColumn": 42,
+	}
+
+	result := parseSettingsFromRaw(base, raw)
+
+	if result.Formatting.IndentSize != 8 {
+		t.Errorf("Formatting.IndentSize = %d, want 8", result.Formatting.IndentSize)
+	}
+	if result.Formatting.MinAlignmentColumn != 42 {
+		t.Errorf("Formatting.MinAlignmentColumn = %d, want 42 (from flat formatting.amountAlignmentColumn)", result.Formatting.MinAlignmentColumn)
+	}
+}
+
 func TestParseSettingsFromRaw_CLI(t *testing.T) {
 	base := defaultServerSettings()
 

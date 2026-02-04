@@ -82,8 +82,9 @@ func defaultServerSettings() serverSettings {
 			UnbalancedTransactions: true,
 		},
 		Formatting: formattingSettings{
-			IndentSize:   4,
-			AlignAmounts: true,
+			IndentSize:         4,
+			AlignAmounts:       true,
+			MinAlignmentColumn: 40,
 		},
 		CLI: cliSettings{
 			Enabled: true,
@@ -291,6 +292,9 @@ func applySettingsMap(settings serverSettings, raw map[string]interface{}) serve
 		if value, ok := toInt(formattingRaw["minAlignmentColumn"]); ok {
 			settings.Formatting.MinAlignmentColumn = value
 		}
+		if value, ok := toInt(formattingRaw["amountAlignmentColumn"]); ok {
+			settings.Formatting.MinAlignmentColumn = value
+		}
 	}
 	if value, ok := toInt(raw["formatting.indentSize"]); ok {
 		settings.Formatting.IndentSize = value
@@ -299,6 +303,9 @@ func applySettingsMap(settings serverSettings, raw map[string]interface{}) serve
 		settings.Formatting.AlignAmounts = value
 	}
 	if value, ok := toInt(raw["formatting.minAlignmentColumn"]); ok {
+		settings.Formatting.MinAlignmentColumn = value
+	}
+	if value, ok := toInt(raw["formatting.amountAlignmentColumn"]); ok {
 		settings.Formatting.MinAlignmentColumn = value
 	}
 
