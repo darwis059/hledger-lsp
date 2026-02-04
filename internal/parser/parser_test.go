@@ -331,6 +331,20 @@ func TestParser_AliasDirective(t *testing.T) {
 	}
 }
 
+func TestParser_AutoPostingRule(t *testing.T) {
+	input := `= expenses:food
+    (budget:food)    $-1
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.AutoPostingRules, 1)
+
+	rule := journal.AutoPostingRules[0]
+	assert.Equal(t, "expenses:food", rule.Query)
+	require.Len(t, rule.Postings, 1)
+	assert.Equal(t, "budget:food", rule.Postings[0].Account.Name)
+}
+
 func TestParser_PeriodicTransaction(t *testing.T) {
 	input := `~ monthly
     expenses:rent    $2000

@@ -59,6 +59,11 @@ func (p *Parser) parseJournal() *ast.Journal {
 			if ptx != nil {
 				journal.PeriodicTransactions = append(journal.PeriodicTransactions, *ptx)
 			}
+		case TokenAutoRule:
+			rule := p.parseAutoPostingRule()
+			if rule != nil {
+				journal.AutoPostingRules = append(journal.AutoPostingRules, *rule)
+			}
 		case TokenDirective:
 			dir := p.parseDirective()
 			if dir != nil {
@@ -223,6 +228,60 @@ func (p *Parser) parsePeriodicTransaction() *ast.PeriodicTransaction {
 
 	ptx.Range.End = toASTPosition(p.current.Pos)
 	return ptx
+}
+
+func (p *Parser) parseAutoPostingRule() *ast.AutoPostingRule {
+	rule := &ast.AutoPostingRule{
+		Postings: make([]ast.Posting, 0, 2),
+	}
+	rule.Range.Start = toASTPosition(p.current.Pos)
+
+	// Skip the = token
+	p.advance()
+
+	// Parse query (everything until newline)
+	var queryParts []string
+	for p.current.Type != TokenNewline && p.current.Type != TokenEOF && p.current.Type != TokenComment {
+		switch p.current.Type {
+		case TokenText, TokenAccount, TokenNumber:
+			queryParts = append(queryParts, p.current.Value)
+		case TokenColon:
+			queryParts = append(queryParts, ":")
+		}
+		p.advance()
+	}
+
+	if len(queryParts) == 0 {
+		p.error("expected query expression after =")
+		p.skipToNextLine()
+		return nil
+	}
+
+	rule.Query = strings.Join(queryParts, "")
+
+	// Parse optional comment
+	if p.current.Type == TokenComment {
+		rule.Comments = append(rule.Comments, p.parseComment())
+	}
+
+	// Skip newline
+	if p.current.Type == TokenNewline {
+		p.advance()
+	}
+
+	// Parse postings
+	for p.current.Type == TokenIndent {
+		posting := p.parsePosting()
+		if posting != nil {
+			rule.Postings = append(rule.Postings, *posting)
+		}
+		if p.current.Type == TokenNewline {
+			p.advance()
+		}
+	}
+
+	rule.Range.End = toASTPosition(p.current.Pos)
+	return rule
 }
 
 func (p *Parser) parseDate() *ast.Date {

@@ -16,6 +16,7 @@ type Position struct {
 type Journal struct {
 	Transactions         []Transaction
 	PeriodicTransactions []PeriodicTransaction
+	AutoPostingRules     []AutoPostingRule
 	Directives           []Directive
 	Comments             []Comment
 	Includes             []Include
@@ -46,6 +47,13 @@ type PeriodicTransaction struct {
 	Tags        []Tag
 	Comments    []Comment
 	Range       Range
+}
+
+type AutoPostingRule struct {
+	Query    string
+	Postings []Posting
+	Comments []Comment
+	Range    Range
 }
 
 type Date struct {

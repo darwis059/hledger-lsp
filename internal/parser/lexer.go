@@ -72,6 +72,11 @@ func (l *Lexer) scanLineStart() Token {
 		return l.makeToken(TokenTilde, "~")
 	}
 
+	if l.peek() == '=' {
+		l.advance()
+		return l.makeToken(TokenAutoRule, "=")
+	}
+
 	return l.scanInLine()
 }
 
