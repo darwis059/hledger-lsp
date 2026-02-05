@@ -1,6 +1,8 @@
 package analyzer
 
 import (
+	"sort"
+
 	"github.com/juev/hledger-lsp/internal/ast"
 	"github.com/juev/hledger-lsp/internal/include"
 )
@@ -35,6 +37,7 @@ func CollectPayeeAccounts(journal *ast.Journal) map[string][]string {
 		for account := range accounts {
 			accountList = append(accountList, account)
 		}
+		sort.Strings(accountList)
 		result[payee] = accountList
 	}
 
@@ -94,6 +97,7 @@ func collectPayeeAccountsFromResolved(resolved *include.ResolvedJournal) map[str
 		for account := range accounts {
 			accountList = append(accountList, account)
 		}
+		sort.Strings(accountList)
 		result[payee] = accountList
 	}
 

@@ -40,7 +40,13 @@ func (s *Server) PayeeAccountHistory(_ context.Context, params json.RawMessage) 
 		}, nil
 	}
 
-	journal, _ := parser.Parse(content)
+	journal, errs := parser.Parse(content)
+	if len(errs) > 0 || journal == nil {
+		return &PayeeAccountHistoryResult{
+			PayeeAccounts: make(map[string][]string),
+			PairUsage:     make(map[string]int),
+		}, nil
+	}
 	result := s.analyzer.Analyze(journal)
 
 	return &PayeeAccountHistoryResult{
