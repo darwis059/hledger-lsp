@@ -36,6 +36,9 @@ type AnalysisResult struct {
 	PayeeCounts     map[string]int
 	CommodityCounts map[string]int
 	TagCounts       map[string]int
+
+	PayeeAccounts         map[string][]string
+	PayeeAccountPairUsage map[string]int
 }
 
 type PostingTemplate struct {

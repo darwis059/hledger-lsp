@@ -1,0 +1,121 @@
+package analyzer
+
+import (
+	"github.com/juev/hledger-lsp/internal/ast"
+	"github.com/juev/hledger-lsp/internal/include"
+)
+
+func CollectPayeeAccounts(journal *ast.Journal) map[string][]string {
+	seen := make(map[string]map[string]bool)
+
+	for _, tx := range journal.Transactions {
+		payee := tx.Payee
+		if payee == "" {
+			payee = tx.Description
+		}
+		if payee == "" {
+			continue
+		}
+
+		if seen[payee] == nil {
+			seen[payee] = make(map[string]bool)
+		}
+
+		for _, posting := range tx.Postings {
+			account := posting.Account.GetResolvedName()
+			if account != "" {
+				seen[payee][account] = true
+			}
+		}
+	}
+
+	result := make(map[string][]string)
+	for payee, accounts := range seen {
+		accountList := make([]string, 0, len(accounts))
+		for account := range accounts {
+			accountList = append(accountList, account)
+		}
+		result[payee] = accountList
+	}
+
+	return result
+}
+
+func CollectPayeeAccountPairUsage(journal *ast.Journal) map[string]int {
+	counts := make(map[string]int)
+
+	for _, tx := range journal.Transactions {
+		payee := tx.Payee
+		if payee == "" {
+			payee = tx.Description
+		}
+		if payee == "" {
+			continue
+		}
+
+		for _, posting := range tx.Postings {
+			account := posting.Account.GetResolvedName()
+			if account != "" {
+				key := payee + "::" + account
+				counts[key]++
+			}
+		}
+	}
+
+	return counts
+}
+
+func collectPayeeAccountsFromResolved(resolved *include.ResolvedJournal) map[string][]string {
+	seen := make(map[string]map[string]bool)
+
+	mergeAccounts := func(journal *ast.Journal) {
+		if journal == nil {
+			return
+		}
+		payeeAccounts := CollectPayeeAccounts(journal)
+		for payee, accounts := range payeeAccounts {
+			if seen[payee] == nil {
+				seen[payee] = make(map[string]bool)
+			}
+			for _, account := range accounts {
+				seen[payee][account] = true
+			}
+		}
+	}
+
+	mergeAccounts(resolved.Primary)
+	for _, journal := range resolved.Files {
+		mergeAccounts(journal)
+	}
+
+	result := make(map[string][]string)
+	for payee, accounts := range seen {
+		accountList := make([]string, 0, len(accounts))
+		for account := range accounts {
+			accountList = append(accountList, account)
+		}
+		result[payee] = accountList
+	}
+
+	return result
+}
+
+func collectPayeeAccountPairUsageFromResolved(resolved *include.ResolvedJournal) map[string]int {
+	counts := make(map[string]int)
+
+	mergeCounts := func(journal *ast.Journal) {
+		if journal == nil {
+			return
+		}
+		for k, v := range CollectPayeeAccountPairUsage(journal) {
+			counts[k] += v
+		}
+	}
+
+	mergeCounts(resolved.Primary)
+	for _, journal := range resolved.Files {
+		mergeCounts(journal)
+	}
+
+	return counts
+}

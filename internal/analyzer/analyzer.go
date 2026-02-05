@@ -24,18 +24,20 @@ func (a *Analyzer) AnalyzeWithExternalDeclarations(journal *ast.Journal, externa
 
 func (a *Analyzer) analyzeInternal(journal *ast.Journal, external ExternalDeclarations) *AnalysisResult {
 	result := &AnalysisResult{
-		Accounts:        CollectAccounts(journal),
-		Payees:          CollectPayees(journal),
-		Commodities:     CollectCommodities(journal),
-		Tags:            CollectTags(journal),
-		TagValues:       CollectTagValues(journal),
-		Dates:           CollectDates(journal),
-		PayeeTemplates:  CollectPayeeTemplates(journal),
-		Diagnostics:     make([]Diagnostic, 0),
-		AccountCounts:   CollectAccountCounts(journal),
-		PayeeCounts:     CollectPayeeCounts(journal),
-		CommodityCounts: CollectCommodityCounts(journal),
-		TagCounts:       CollectTagCounts(journal),
+		Accounts:              CollectAccounts(journal),
+		Payees:                CollectPayees(journal),
+		Commodities:           CollectCommodities(journal),
+		Tags:                  CollectTags(journal),
+		TagValues:             CollectTagValues(journal),
+		Dates:                 CollectDates(journal),
+		PayeeTemplates:        CollectPayeeTemplates(journal),
+		Diagnostics:           make([]Diagnostic, 0),
+		AccountCounts:         CollectAccountCounts(journal),
+		PayeeCounts:           CollectPayeeCounts(journal),
+		CommodityCounts:       CollectCommodityCounts(journal),
+		TagCounts:             CollectTagCounts(journal),
+		PayeeAccounts:         CollectPayeeAccounts(journal),
+		PayeeAccountPairUsage: CollectPayeeAccountPairUsage(journal),
 	}
 
 	declaredAccounts := collectDeclaredAccounts(journal)
@@ -76,18 +78,20 @@ func (a *Analyzer) analyzeInternal(journal *ast.Journal, external ExternalDeclar
 
 func (a *Analyzer) AnalyzeResolved(resolved *include.ResolvedJournal) *AnalysisResult {
 	result := &AnalysisResult{
-		Accounts:        NewAccountIndex(),
-		Payees:          []string{},
-		Commodities:     []string{},
-		Tags:            []string{},
-		TagValues:       make(map[string][]string),
-		Dates:           []string{},
-		PayeeTemplates:  make(map[string][]PostingTemplate),
-		Diagnostics:     make([]Diagnostic, 0),
-		AccountCounts:   make(map[string]int),
-		PayeeCounts:     make(map[string]int),
-		CommodityCounts: make(map[string]int),
-		TagCounts:       make(map[string]int),
+		Accounts:              NewAccountIndex(),
+		Payees:                []string{},
+		Commodities:           []string{},
+		Tags:                  []string{},
+		TagValues:             make(map[string][]string),
+		Dates:                 []string{},
+		PayeeTemplates:        make(map[string][]PostingTemplate),
+		Diagnostics:           make([]Diagnostic, 0),
+		AccountCounts:         make(map[string]int),
+		PayeeCounts:           make(map[string]int),
+		CommodityCounts:       make(map[string]int),
+		TagCounts:             make(map[string]int),
+		PayeeAccounts:         make(map[string][]string),
+		PayeeAccountPairUsage: make(map[string]int),
 	}
 
 	if resolved == nil || resolved.Primary == nil {
@@ -105,6 +109,8 @@ func (a *Analyzer) AnalyzeResolved(resolved *include.ResolvedJournal) *AnalysisR
 	result.PayeeCounts = collectPayeeCountsFromResolved(resolved)
 	result.CommodityCounts = collectCommodityCountsFromResolved(resolved)
 	result.TagCounts = collectTagCountsFromResolved(resolved)
+	result.PayeeAccounts = collectPayeeAccountsFromResolved(resolved)
+	result.PayeeAccountPairUsage = collectPayeeAccountPairUsageFromResolved(resolved)
 
 	declaredAccounts := collectDeclaredAccountsFromResolved(resolved)
 	declaredCommodities := collectDeclaredCommoditiesFromResolved(resolved)

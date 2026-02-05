@@ -1,0 +1,50 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+
+	"go.lsp.dev/protocol"
+
+	"github.com/juev/hledger-lsp/internal/parser"
+)
+
+type PayeeAccountHistoryParams struct {
+	TextDocument protocol.TextDocumentIdentifier `json:"textDocument"`
+}
+
+type PayeeAccountHistoryResult struct {
+	PayeeAccounts map[string][]string `json:"payeeAccounts"`
+	PairUsage     map[string]int      `json:"pairUsage"`
+}
+
+func (s *Server) PayeeAccountHistory(_ context.Context, params json.RawMessage) (*PayeeAccountHistoryResult, error) {
+	var p PayeeAccountHistoryParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, err
+	}
+
+	content, ok := s.GetDocument(p.TextDocument.URI)
+	if !ok {
+		return &PayeeAccountHistoryResult{
+			PayeeAccounts: make(map[string][]string),
+			PairUsage:     make(map[string]int),
+		}, nil
+	}
+
+	if resolved := s.getWorkspaceResolved(p.TextDocument.URI); resolved != nil {
+		result := s.analyzer.AnalyzeResolved(resolved)
+		return &PayeeAccountHistoryResult{
+			PayeeAccounts: result.PayeeAccounts,
+			PairUsage:     result.PayeeAccountPairUsage,
+		}, nil
+	}
+
+	journal, _ := parser.Parse(content)
+	result := s.analyzer.Analyze(journal)
+
+	return &PayeeAccountHistoryResult{
+		PayeeAccounts: result.PayeeAccounts,
+		PairUsage:     result.PayeeAccountPairUsage,
+	}, nil
+}

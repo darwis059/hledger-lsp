@@ -319,6 +319,13 @@ func (d *serverDispatcher) NonstandardRequest(ctx context.Context, method string
 		}
 		return result, err
 	}
+	if method == "hledger/payeeAccountHistory" {
+		paramsJSON, err := json.Marshal(params)
+		if err != nil {
+			return nil, err
+		}
+		return d.srv.PayeeAccountHistory(ctx, paramsJSON)
+	}
 	return nil, nil
 }
 
@@ -349,6 +356,13 @@ func (d *serverDispatcher) Request(ctx context.Context, method string, params an
 			fmt.Fprintf(os.Stderr, "[LSP DEBUG] InlineCompletion returned nil\n")
 		}
 		return result, err
+	}
+	if method == "hledger/payeeAccountHistory" {
+		paramsJSON, err := json.Marshal(params)
+		if err != nil {
+			return nil, err
+		}
+		return d.srv.PayeeAccountHistory(ctx, paramsJSON)
 	}
 	return nil, nil
 }
