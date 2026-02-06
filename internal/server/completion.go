@@ -152,12 +152,19 @@ func determineCompletionContext(content string, pos protocol.Position, ctx *prot
 		return ContextAccount
 	}
 
-	if strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "\t") {
+	if len(line) > 0 && (line[0] == ' ' || line[0] == '\t') {
 		return determinePostingContext(line, pos)
 	}
 
 	if len(line) > 0 && line[0] >= '0' && line[0] <= '9' {
-		return ContextPayee
+		spaceIdx := strings.IndexByte(line, ' ')
+		if spaceIdx != -1 {
+			byteCol := lsputil.UTF16OffsetToByteOffset(line, int(pos.Character))
+			if byteCol > spaceIdx {
+				return ContextPayee
+			}
+		}
+		return ContextDate
 	}
 
 	return ContextDate
@@ -669,6 +676,12 @@ func calculateTextEditRange(content string, pos protocol.Position, ctxType Compl
 				startByte++
 			}
 		}
+	case ContextDate:
+		if len(line) > 0 && line[0] >= '0' && line[0] <= '9' {
+			startByte = 0
+			break
+		}
+		return nil
 	default:
 		return nil
 	}
@@ -743,6 +756,11 @@ func extractQueryText(content string, pos protocol.Position, ctxType CompletionC
 		}
 		return strings.TrimLeft(afterAccount[amountEnd:], " ")
 
+	case ContextDate:
+		if len(beforeCursor) > 0 && beforeCursor[0] >= '0' && beforeCursor[0] <= '9' {
+			return beforeCursor
+		}
+		return ""
 	default:
 		return ""
 	}

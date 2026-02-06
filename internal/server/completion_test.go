@@ -2111,6 +2111,103 @@ func TestCompletion_Date_UsesNearbyFormat(t *testing.T) {
 		"today should use MM-DD format from nearby transactions, not YYYY-MM-DD from file start")
 }
 
+func TestDetermineContext_PartialDate(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		char     uint32
+		expected CompletionContextType
+	}{
+		{"typing year", "2026", 4, ContextDate},
+		{"typing year-month-", "2026-01-", 8, ContextDate},
+		{"full date no space", "2026-01-15", 10, ContextDate},
+		{"full date with space", "2026-01-15 ", 11, ContextPayee},
+		{"full date with payee", "2024-01-15 Groc", 15, ContextPayee},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := determineCompletionContext(tt.content, protocol.Position{Line: 0, Character: tt.char}, nil)
+			assert.Equal(t, tt.expected, ctx)
+		})
+	}
+}
+
+func TestDetermineContext_IndentedPosting(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		line     uint32
+		char     uint32
+		expected CompletionContextType
+	}{
+		{"1 space indent with account", "2024-01-15 test\n exp", 1, 4, ContextAccount},
+		{"2 space indent with account", "2024-01-15 test\n  exp", 1, 5, ContextAccount},
+		{"3 space indent with account", "2024-01-15 test\n   exp", 1, 6, ContextAccount},
+		{"1 space only (empty posting)", "2024-01-15 test\n ", 1, 1, ContextAccount},
+		{"4 spaces (existing behavior)", "2024-01-15 test\n    exp", 1, 7, ContextAccount},
+		{"tab (existing behavior)", "2024-01-15 test\n\texp", 1, 4, ContextAccount},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := determineCompletionContext(tt.content, protocol.Position{Line: tt.line, Character: tt.char}, nil)
+			assert.Equal(t, tt.expected, ctx)
+		})
+	}
+}
+
+func TestExtractQueryText_PartialDate(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		char     uint32
+		expected string
+	}{
+		{"partial date", "2026-01-", 8, "2026-01-"},
+		{"empty line", "", 0, ""},
+		{"full date", "2026-01-15", 10, "2026-01-15"},
+		{"just year", "2026", 4, "2026"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pos := protocol.Position{Line: 0, Character: tt.char}
+			result := extractQueryText(tt.content, pos, ContextDate)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestCalculateTextEditRange_PartialDate(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		char      uint32
+		wantStart uint32
+		wantEnd   uint32
+		wantNil   bool
+	}{
+		{"partial date replaces from col 0", "2026-01-", 8, 0, 8, false},
+		{"full date replaces from col 0", "2026-01-15", 10, 0, 10, false},
+		{"empty line returns nil", "", 0, 0, 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pos := protocol.Position{Line: 0, Character: tt.char}
+			r := calculateTextEditRange(tt.content, pos, ContextDate)
+			if tt.wantNil {
+				assert.Nil(t, r)
+			} else {
+				require.NotNil(t, r)
+				assert.Equal(t, tt.wantStart, r.Start.Character)
+				assert.Equal(t, tt.wantEnd, r.End.Character)
+			}
+		})
+	}
+}
+
 func TestDetectDateFormat_FromCursorPosition(t *testing.T) {
 	tests := []struct {
 		name       string
