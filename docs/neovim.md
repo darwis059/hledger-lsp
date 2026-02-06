@@ -2,16 +2,51 @@
 
 ## Prerequisites
 
-- Neovim 0.8+
-- [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig)
+- Neovim 0.11+ (recommended) or Neovim 0.8+
+- `hledger-lsp` binary in PATH (see [main README](../README.md#-installation))
 
-## Installation
+## Neovim 0.11+ (recommended)
 
-1. Install hledger-lsp binary (see [main README](../README.md#-installation))
+Neovim 0.11 introduced native LSP configuration via `vim.lsp.config()` and `vim.lsp.enable()`. No plugins required.
 
-2. Add LSP configuration to your Neovim config:
+### Option A: lsp/ directory (cleanest)
 
-### Using lazy.nvim
+Create `~/.config/nvim/lsp/hledger_lsp.lua`:
+
+```lua
+return {
+  cmd = { "hledger-lsp" },
+  filetypes = { "hledger", "journal" },
+  root_markers = { ".git", "*.journal" },
+  single_file_support = true,
+}
+```
+
+Then enable it in your `init.lua`:
+
+```lua
+vim.lsp.enable("hledger_lsp")
+```
+
+### Option B: inline in init.lua
+
+```lua
+vim.lsp.config("hledger_lsp", {
+  cmd = { "hledger-lsp" },
+  filetypes = { "hledger", "journal" },
+  root_markers = { ".git", "*.journal" },
+  single_file_support = true,
+})
+
+vim.lsp.enable("hledger_lsp")
+```
+
+## Legacy (Neovim < 0.11)
+
+For older Neovim versions, use [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig):
+
+<details>
+<summary>Using lazy.nvim</summary>
 
 ```lua
 {
@@ -36,7 +71,10 @@
 }
 ```
 
-### Using init.lua directly
+</details>
+
+<details>
+<summary>Using init.lua directly</summary>
 
 ```lua
 local lspconfig = require("lspconfig")
@@ -55,6 +93,8 @@ end
 
 lspconfig.hledger_lsp.setup({})
 ```
+
+</details>
 
 ## Filetype Detection
 
@@ -99,7 +139,7 @@ vim.api.nvim_set_hl(0, "@lsp.type.status.hledger", { fg = "#D4D4D4" })
 
 ## Keybindings
 
-Recommended keybindings for LSP features:
+Neovim 0.11+ includes default LSP keymaps (`grn` rename, `gra` code action, `grr` references). For additional bindings:
 
 ```lua
 vim.api.nvim_create_autocmd("LspAttach", {
@@ -116,13 +156,13 @@ vim.api.nvim_create_autocmd("LspAttach", {
 ## Verify
 
 1. Open a `.journal` file
-2. Run `:LspInfo` — should show hledger_lsp attached
+2. Run `:checkhealth vim.lsp` — should show hledger_lsp attached
 3. Type an account name and trigger completion (`<C-x><C-o>` or your completion plugin)
 
 ## Troubleshooting
 
 **LSP not attaching:**
-- Check `:LspLog` for errors
+- Run `:checkhealth vim.lsp` and check for errors
 - Verify filetype with `:set ft?`
 - Ensure `hledger-lsp` is in PATH
 
