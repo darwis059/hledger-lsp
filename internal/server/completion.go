@@ -360,7 +360,8 @@ func (s *Server) generateCompletionItems(ctxType CompletionContextType, result *
 		}
 
 	case ContextDate:
-		items = generateDateCompletionItems(result.Dates, content, int(pos.Line))
+		typedPrefix := extractDateTypedPrefix(content, pos)
+		items = generateDateCompletionItems(result.Dates, content, int(pos.Line), typedPrefix)
 
 	default:
 		for _, acc := range result.Accounts.All {
@@ -463,11 +464,14 @@ func extractCurrentTagName(line string, pos int) string {
 
 // generateDateCompletionItems creates date suggestions with today/yesterday/tomorrow at top.
 // Tests check detail strings ("today" etc.) not specific dates, making them time-independent.
-func generateDateCompletionItems(historicalDates []string, content string, cursorLine int) []protocol.CompletionItem {
+func generateDateCompletionItems(historicalDates []string, content string, cursorLine int, typedPrefix string) []protocol.CompletionItem {
 	var items []protocol.CompletionItem
 	now := time.Now()
 
 	format := detectDateFormat(content, cursorLine)
+	if override := detectFormatFromTypedText(typedPrefix); override != nil {
+		format = *override
+	}
 	today := formatDateWithFormat(now, format)
 	yesterday := formatDateWithFormat(now.AddDate(0, 0, -1), format)
 	tomorrow := formatDateWithFormat(now.AddDate(0, 0, 1), format)
@@ -638,6 +642,34 @@ func reformatDateString(dateStr string, f DateFormat) string {
 		return dateStr
 	}
 	return formatDateWithFormat(t, f)
+}
+
+func detectFormatFromTypedText(typed string) *DateFormat {
+	if len(typed) >= 4 && isAllDigits(typed[:4]) {
+		sep := "-"
+		if len(typed) > 4 {
+			sep = string(typed[4])
+		}
+		return &DateFormat{Separator: sep, HasYear: true, LeadingZeros: true}
+	}
+	return nil
+}
+
+func extractDateTypedPrefix(content string, pos protocol.Position) string {
+	lines := strings.Split(content, "\n")
+	if int(pos.Line) >= len(lines) {
+		return ""
+	}
+	line := lines[pos.Line]
+	byteCol := lsputil.UTF16OffsetToByteOffset(line, int(pos.Character))
+	if byteCol > len(line) {
+		byteCol = len(line)
+	}
+	prefix := line[:byteCol]
+	if len(prefix) > 0 && prefix[0] >= '0' && prefix[0] <= '9' {
+		return prefix
+	}
+	return ""
 }
 
 func calculateTextEditRange(content string, pos protocol.Position, ctxType CompletionContextType) *protocol.Range {

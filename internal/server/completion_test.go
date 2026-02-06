@@ -2208,6 +2208,153 @@ func TestCalculateTextEditRange_PartialDate(t *testing.T) {
 	}
 }
 
+func TestCompletion_PartialDateReturnsDates(t *testing.T) {
+	srv := NewServer()
+	content := `2024-01-10 Apple
+    Расходы:Транспорт  71,00
+    Активы:Сбербанк:Текущий
+
+2026-`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 5},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, len(result.Items) > 0, "should have completion items for partial date")
+
+	details := extractDetails(result.Items)
+	assert.Contains(t, details, "today", "partial date should show date completions, not payees")
+	assert.Contains(t, details, "yesterday")
+	assert.Contains(t, details, "tomorrow")
+
+	labels := extractLabels(result.Items)
+	assert.NotContains(t, labels, "Apple", "should NOT show payees when typing partial date")
+
+	for _, item := range result.Items {
+		assert.Equal(t, protocol.CompletionItemKindConstant, item.Kind,
+			"date items should have Constant kind, got item: %s", item.Label)
+		if item.TextEdit != nil {
+			assert.Equal(t, uint32(0), item.TextEdit.Range.Start.Character,
+				"TextEdit should replace from column 0")
+			assert.Equal(t, uint32(5), item.TextEdit.Range.End.Character,
+				"TextEdit should replace to cursor position")
+		}
+	}
+}
+
+func TestCompletion_PartialDateOverridesFileFormat(t *testing.T) {
+	srv := NewServer()
+	content := `01-05 transaction 1
+    expenses:food  $20
+    assets:cash
+
+2026-`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 5},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, len(result.Items) > 0, "should have completion items when typing year prefix")
+
+	details := extractDetails(result.Items)
+	assert.Contains(t, details, "today", "should contain today")
+	assert.Contains(t, details, "yesterday", "should contain yesterday")
+	assert.Contains(t, details, "tomorrow", "should contain tomorrow")
+
+	for _, item := range result.Items {
+		if item.Detail == "today" || item.Detail == "yesterday" || item.Detail == "tomorrow" {
+			assert.Regexp(t, `^\d{4}-\d{2}-\d{2}$`, item.Label,
+				"when user types '2026-', dates should be YYYY-MM-DD, not MM-DD; got %s", item.Label)
+		}
+	}
+}
+
+func TestCompletion_ShortDateKeepsShortFormat(t *testing.T) {
+	srv := NewServer()
+	content := `01-05 transaction 1
+    expenses:food  $20
+    assets:cash
+
+02-`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 3},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, len(result.Items) > 0, "should have completion items for short date prefix")
+
+	for _, item := range result.Items {
+		if item.Detail == "today" || item.Detail == "yesterday" || item.Detail == "tomorrow" {
+			assert.Regexp(t, `^\d{2}-\d{2}$`, item.Label,
+				"when user types '02-' and file uses MM-DD, dates should stay MM-DD; got %s", item.Label)
+		}
+	}
+}
+
+func TestDetectFormatFromTypedText(t *testing.T) {
+	tests := []struct {
+		name     string
+		typed    string
+		wantNil  bool
+		wantYear bool
+		wantSep  string
+	}{
+		{"year prefix with dash", "2026-", false, true, "-"},
+		{"year prefix with slash", "2026/", false, true, "/"},
+		{"year prefix with dot", "2026.", false, true, "."},
+		{"four digits only", "2026", false, true, "-"},
+		{"full date", "2026-02-06", false, true, "-"},
+		{"short two digits", "02-", true, false, ""},
+		{"short one digit", "2-", true, false, ""},
+		{"empty", "", true, false, ""},
+		{"non-digit", "abc", true, false, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := detectFormatFromTypedText(tt.typed)
+			if tt.wantNil {
+				assert.Nil(t, result, "expected nil for typed=%q", tt.typed)
+			} else {
+				require.NotNil(t, result, "expected non-nil for typed=%q", tt.typed)
+				assert.Equal(t, tt.wantYear, result.HasYear)
+				assert.Equal(t, tt.wantSep, result.Separator)
+				assert.True(t, result.LeadingZeros)
+			}
+		})
+	}
+}
+
 func TestDetectDateFormat_FromCursorPosition(t *testing.T) {
 	tests := []struct {
 		name       string
