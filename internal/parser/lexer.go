@@ -681,7 +681,7 @@ func (l *Lexer) isAccountStartRune(r rune) bool {
 }
 
 func (l *Lexer) isCurrencySymbol(r rune) bool {
-	return r == '$' || r == '€' || r == '£' || r == '¥' || r == '₽' || r == '₴'
+	return unicode.Is(unicode.Sc, r)
 }
 
 func (l *Lexer) looksLikeMultiCharCurrency() bool {

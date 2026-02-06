@@ -1014,6 +1014,9 @@ func TestParser_CommodityDirectiveInlineFormat(t *testing.T) {
 		{"symbol right BTC", "commodity 1.00000000 BTC", "BTC", "1.00000000 BTC"},
 		{"symbol left dollar", "commodity $1000.00", "$", "$1000.00"},
 		{"symbol left euro", "commodity €1.000,00", "€", "€1.000,00"},
+		{"symbol left Turkish lira", "commodity ₺1.000,00", "₺", "₺1.000,00"},
+		{"symbol right Turkish lira", "commodity 1.000,00 ₺", "₺", "1.000,00 ₺"},
+		{"symbol left Indian rupee", "commodity ₹1,00,000.00", "₹", "₹1,00,000.00"},
 	}
 
 	for _, tt := range tests {

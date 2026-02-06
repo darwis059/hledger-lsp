@@ -859,9 +859,59 @@ func TestLexer_SignBeforeCommodity(t *testing.T) {
 			tokens: []TokenType{TokenSign, TokenCommodity, TokenNumber, TokenEOF},
 		},
 		{
+			name:   "negative Turkish lira",
+			input:  "-₺100",
+			tokens: []TokenType{TokenSign, TokenCommodity, TokenNumber, TokenEOF},
+		},
+		{
+			name:   "negative Indian rupee",
+			input:  "-₹100",
+			tokens: []TokenType{TokenSign, TokenCommodity, TokenNumber, TokenEOF},
+		},
+		{
 			name:   "negative in posting",
 			input:  "    assets:cash  -$50.00",
 			tokens: []TokenType{TokenIndent, TokenAccount, TokenSign, TokenCommodity, TokenNumber, TokenEOF},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			tokens := collectTokens(lexer)
+			require.Len(t, tokens, len(tt.tokens), "token count mismatch")
+			for i, expectedType := range tt.tokens {
+				assert.Equal(t, expectedType, tokens[i].Type, "token %d type mismatch", i)
+			}
+		})
+	}
+}
+
+func TestLexer_UnicodeCurrencySymbols(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		tokens []TokenType
+	}{
+		{
+			name:   "commodity directive Turkish lira",
+			input:  "commodity ₺1.000,00",
+			tokens: []TokenType{TokenDirective, TokenCommodity, TokenNumber, TokenEOF},
+		},
+		{
+			name:   "commodity directive Indian rupee",
+			input:  "commodity ₹1,00,000.00",
+			tokens: []TokenType{TokenDirective, TokenCommodity, TokenNumber, TokenEOF},
+		},
+		{
+			name:   "commodity directive Israeli shekel",
+			input:  "commodity ₪100.00",
+			tokens: []TokenType{TokenDirective, TokenCommodity, TokenNumber, TokenEOF},
+		},
+		{
+			name:   "commodity directive Bitcoin",
+			input:  "commodity ₿1.00000000",
+			tokens: []TokenType{TokenDirective, TokenCommodity, TokenNumber, TokenEOF},
 		},
 	}
 
