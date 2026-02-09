@@ -188,6 +188,9 @@ func determinePostingContext(line string, pos protocol.Position) CompletionConte
 	}
 
 	relativePos := posInContent - parts.separatorIdx - parts.skipSpaces
+	if relativePos <= parts.prefixEnd {
+		return ContextCommodity
+	}
 	if relativePos <= parts.amountEnd {
 		return ContextAccount
 	}
@@ -202,6 +205,17 @@ func findDoublespace(s string) int {
 		}
 	}
 	return -1
+}
+
+func findPrefixCommodityEnd(s string) int {
+	if len(s) == 0 || isDigitOrSign(s[0]) || s[0] == '(' {
+		return 0
+	}
+	i := 0
+	for i < len(s) && !isDigitOrSign(s[i]) && s[i] != ' ' && s[i] != '(' && s[i] != ')' {
+		i++
+	}
+	return i
 }
 
 func findAmountEnd(s string) int {
@@ -232,6 +246,7 @@ type postingParts struct {
 	separatorIdx int
 	afterAccount string
 	skipSpaces   int
+	prefixEnd    int
 	amountEnd    int
 }
 
@@ -254,6 +269,7 @@ func parsePosting(line string) postingParts {
 	afterSeparator := trimmed[parts.separatorIdx:]
 	parts.afterAccount = strings.TrimLeft(afterSeparator, " ")
 	parts.skipSpaces = len(afterSeparator) - len(parts.afterAccount)
+	parts.prefixEnd = findPrefixCommodityEnd(parts.afterAccount)
 	parts.amountEnd = findAmountEnd(parts.afterAccount)
 
 	return parts
@@ -740,8 +756,14 @@ func findCommodityStart(line string, byteCol int) int {
 		return byteCol
 	}
 
-	commodityStart := parts.indent + parts.separatorIdx + parts.skipSpaces + parts.amountEnd
+	afterAccountStart := parts.indent + parts.separatorIdx + parts.skipSpaces
+	relativeCol := byteCol - afterAccountStart
 
+	if relativeCol <= parts.prefixEnd {
+		return afterAccountStart
+	}
+
+	commodityStart := afterAccountStart + parts.amountEnd
 	for commodityStart < len(line) && line[commodityStart] == ' ' {
 		commodityStart++
 	}
@@ -785,17 +807,25 @@ func extractQueryText(content string, pos protocol.Position, ctxType CompletionC
 		if after, found := strings.CutPrefix(beforeCursor, directiveCommodity); found {
 			return after
 		}
-		trimmed := strings.TrimLeft(beforeCursor, " \t")
-		separatorIdx := findDoublespace(trimmed)
-		if separatorIdx == -1 {
+		parts := parsePosting(line)
+		if parts.separatorIdx == -1 {
 			return ""
 		}
-		afterAccount := strings.TrimLeft(trimmed[separatorIdx:], " ")
-		amountEnd := findAmountEnd(afterAccount)
-		if amountEnd >= len(afterAccount) {
+		afterAccountStart := parts.indent + parts.separatorIdx + parts.skipSpaces
+		relativeCol := byteCol - afterAccountStart
+		isPrefixComplete := parts.prefixEnd > 0 &&
+			parts.prefixEnd < len(parts.afterAccount) &&
+			isDigitOrSign(parts.afterAccount[parts.prefixEnd])
+		if relativeCol <= parts.prefixEnd && !isPrefixComplete {
+			if relativeCol <= 0 {
+				return ""
+			}
+			return parts.afterAccount[:relativeCol]
+		}
+		if parts.amountEnd >= len(parts.afterAccount) {
 			return ""
 		}
-		return strings.TrimLeft(afterAccount[amountEnd:], " ")
+		return strings.TrimLeft(parts.afterAccount[parts.amountEnd:], " ")
 
 	case ContextDate:
 		if len(beforeCursor) > 0 && beforeCursor[0] >= '0' && beforeCursor[0] <= '9' {

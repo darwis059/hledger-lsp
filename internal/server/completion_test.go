@@ -2355,6 +2355,210 @@ func TestDetectFormatFromTypedText(t *testing.T) {
 	}
 }
 
+func TestCompletion_PrefixCommodity(t *testing.T) {
+	srv := NewServer()
+	content := `commodity USD
+commodity EUR
+commodity RUB
+
+2024-01-15 test
+    expenses:food  `
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 5, Character: 19},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "USD", "should suggest commodities in prefix position")
+	assert.Contains(t, labels, "EUR", "should suggest commodities in prefix position")
+	assert.Contains(t, labels, "RUB", "should suggest commodities in prefix position")
+	assert.NotContains(t, labels, "expenses:food", "should NOT suggest accounts in commodity position")
+}
+
+func TestExtractQueryText_PrefixCommodity(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		line     uint32
+		char     uint32
+		expected string
+	}{
+		{
+			name:     "prefix $ typed",
+			content:  "2024-01-15 test\n    expenses:food  $",
+			line:     1,
+			char:     20,
+			expected: "$",
+		},
+		{
+			name:     "prefix EU typed",
+			content:  "2024-01-15 test\n    expenses:food  EU",
+			line:     1,
+			char:     21,
+			expected: "EU",
+		},
+		{
+			name:     "empty prefix position",
+			content:  "2024-01-15 test\n    expenses:food  ",
+			line:     1,
+			char:     19,
+			expected: "",
+		},
+		{
+			name:     "suffix US typed",
+			content:  "2024-01-15 test\n    expenses:food  100 US",
+			line:     1,
+			char:     26,
+			expected: "US",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pos := protocol.Position{Line: tt.line, Character: tt.char}
+			result := extractQueryText(tt.content, pos, ContextCommodity)
+			assert.Equal(t, tt.expected, result, "extractQueryText for %q at char %d", tt.content, tt.char)
+		})
+	}
+}
+
+func TestFindCommodityStart_PrefixPosition(t *testing.T) {
+	tests := []struct {
+		name      string
+		line      string
+		byteCol   int
+		wantStart int
+	}{
+		{
+			name:      "prefix $ position",
+			line:      "    expenses:food  $50",
+			byteCol:   20,
+			wantStart: 19,
+		},
+		{
+			name:      "prefix EUR position",
+			line:      "    expenses:food  EUR 100",
+			byteCol:   21,
+			wantStart: 19,
+		},
+		{
+			name:      "suffix USD position",
+			line:      "    expenses:food  100 USD",
+			byteCol:   25,
+			wantStart: 23,
+		},
+		{
+			name:      "empty after separator",
+			line:      "    expenses:food  ",
+			byteCol:   19,
+			wantStart: 19,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := findCommodityStart(tt.line, tt.byteCol)
+			assert.Equal(t, tt.wantStart, result, "findCommodityStart(%q, %d)", tt.line, tt.byteCol)
+		})
+	}
+}
+
+func TestDetermineContext_PrefixCommodity(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		line     uint32
+		char     uint32
+		expected CompletionContextType
+	}{
+		{
+			name:     "empty position after separator → commodity",
+			content:  "2024-01-15 test\n    expenses:food  ",
+			line:     1,
+			char:     19,
+			expected: ContextCommodity,
+		},
+		{
+			name:     "cursor after $ prefix → commodity",
+			content:  "2024-01-15 test\n    expenses:food  $",
+			line:     1,
+			char:     20,
+			expected: ContextCommodity,
+		},
+		{
+			name:     "cursor in EUR prefix → commodity",
+			content:  "2024-01-15 test\n    expenses:food  EU",
+			line:     1,
+			char:     21,
+			expected: ContextCommodity,
+		},
+		{
+			name:     "cursor in digits after $ → account (amount area)",
+			content:  "2024-01-15 test\n    expenses:food  $50",
+			line:     1,
+			char:     22,
+			expected: ContextAccount,
+		},
+		{
+			name:     "no prefix, cursor in digits → account",
+			content:  "2024-01-15 test\n    expenses:food  50",
+			line:     1,
+			char:     21,
+			expected: ContextAccount,
+		},
+		{
+			name:     "suffix commodity position → commodity",
+			content:  "2024-01-15 test\n    expenses:food  50.00 ",
+			line:     1,
+			char:     25,
+			expected: ContextCommodity,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pos := protocol.Position{Line: tt.line, Character: tt.char}
+			ctx := determineCompletionContext(tt.content, pos, nil)
+			assert.Equal(t, tt.expected, ctx, "context for %q at char %d", tt.content, tt.char)
+		})
+	}
+}
+
+func TestFindPrefixCommodityEnd(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected int
+	}{
+		{"dollar prefix", "$50", 1},
+		{"EUR prefix with space", "EUR 100", 3},
+		{"no prefix (number first)", "100 USD", 0},
+		{"euro sign prefix", "€100", len("€")},
+		{"empty string", "", 0},
+		{"negative with dollar prefix", "$-50", 1},
+		{"prefix with parens", "$(-50)", 1},
+		{"just commodity no number", "USD", 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := findPrefixCommodityEnd(tt.input)
+			assert.Equal(t, tt.expected, result, "findPrefixCommodityEnd(%q)", tt.input)
+		})
+	}
+}
+
 func TestCompletion_PayeeWithTab(t *testing.T) {
 	srv := NewServer()
 	content := "2024-01-15 Grocery Store\n    expenses:food  $50\n    assets:cash\n\n2024-01-16\t"
