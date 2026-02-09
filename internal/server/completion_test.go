@@ -2355,6 +2355,123 @@ func TestDetectFormatFromTypedText(t *testing.T) {
 	}
 }
 
+func TestCompletion_PayeeWithTab(t *testing.T) {
+	srv := NewServer()
+	content := "2024-01-15 Grocery Store\n    expenses:food  $50\n    assets:cash\n\n2024-01-16\t"
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 11},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "Grocery Store", "should suggest payees when tab separates date and payee")
+
+	for _, item := range result.Items {
+		if item.Label == "Grocery Store" {
+			require.NotNil(t, item.TextEdit, "TextEdit should be set")
+			assert.Equal(t, uint32(11), item.TextEdit.Range.Start.Character, "TextEdit should start after tab")
+			assert.Equal(t, uint32(11), item.TextEdit.Range.End.Character, "TextEdit should end at cursor")
+		}
+	}
+}
+
+func TestExtractQueryText_PayeeWithTab(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		char     uint32
+		expected string
+	}{
+		{"tab separator", "2024-01-15\tgrocery", 18, "grocery"},
+		{"tab then empty", "2024-01-15\t", 11, ""},
+		{"tab with status marker", "2024-01-15\t* grocery", 20, "* grocery"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pos := protocol.Position{Line: 0, Character: tt.char}
+			result := extractQueryText(tt.content, pos, ContextPayee)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestCalculateTextEditRange_PayeeWithTab(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		char      uint32
+		wantStart uint32
+		wantEnd   uint32
+	}{
+		{"tab separator", "2024-01-15\tgrocery", 18, 11, 18},
+		{"tab then status marker", "2024-01-15\t* grocery", 20, 13, 20},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pos := protocol.Position{Line: 0, Character: tt.char}
+			r := calculateTextEditRange(tt.content, pos, ContextPayee)
+			require.NotNil(t, r)
+			assert.Equal(t, tt.wantStart, r.Start.Character)
+			assert.Equal(t, tt.wantEnd, r.End.Character)
+		})
+	}
+}
+
+func TestDetermineContext_PayeeWithTab(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		char     uint32
+		expected CompletionContextType
+	}{
+		{"tab between date and payee", "2024-01-15\tgrocery", 18, ContextPayee},
+		{"tab then space", "2024-01-15\t grocery", 19, ContextPayee},
+		{"tab cursor after date", "2024-01-15\t", 11, ContextPayee},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := determineCompletionContext(tt.content, protocol.Position{Line: 0, Character: tt.char}, nil)
+			assert.Equal(t, tt.expected, ctx)
+		})
+	}
+}
+
+func TestIndexFirstWhitespace(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected int
+	}{
+		{"space only", "2024-01-15 test", 10},
+		{"tab only", "2024-01-15\ttest", 10},
+		{"no whitespace", "2024-01-15", -1},
+		{"tab before space", "2024-01-15\t test", 10},
+		{"space before tab", "2024-01-15 \ttest", 10},
+		{"empty string", "", -1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := indexFirstWhitespace(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestDetectDateFormat_FromCursorPosition(t *testing.T) {
 	tests := []struct {
 		name       string

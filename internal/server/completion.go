@@ -157,10 +157,10 @@ func determineCompletionContext(content string, pos protocol.Position, ctx *prot
 	}
 
 	if len(line) > 0 && line[0] >= '0' && line[0] <= '9' {
-		spaceIdx := strings.IndexByte(line, ' ')
-		if spaceIdx != -1 {
+		wsIdx := indexFirstWhitespace(line)
+		if wsIdx != -1 {
 			byteCol := lsputil.UTF16OffsetToByteOffset(line, int(pos.Character))
-			if byteCol > spaceIdx {
+			if byteCol > wsIdx {
 				return ContextPayee
 			}
 		}
@@ -257,6 +257,15 @@ func parsePosting(line string) postingParts {
 	parts.amountEnd = findAmountEnd(parts.afterAccount)
 
 	return parts
+}
+
+func indexFirstWhitespace(s string) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == ' ' || s[i] == '\t' {
+			return i
+		}
+	}
+	return -1
 }
 
 func isDigitOrSign(c byte) bool {
@@ -701,10 +710,10 @@ func calculateTextEditRange(content string, pos protocol.Position, ctxType Compl
 			startByte = findCommodityStart(line, byteCol)
 		}
 	case ContextPayee:
-		spaceIdx := strings.Index(line[:byteCol], " ")
-		if spaceIdx != -1 {
-			startByte = spaceIdx + 1
-			for startByte < byteCol && (line[startByte] == ' ' || line[startByte] == '*' || line[startByte] == '!') {
+		wsIdx := indexFirstWhitespace(line[:byteCol])
+		if wsIdx != -1 {
+			startByte = wsIdx + 1
+			for startByte < byteCol && (line[startByte] == ' ' || line[startByte] == '\t' || line[startByte] == '*' || line[startByte] == '!') {
 				startByte++
 			}
 		}
@@ -766,11 +775,11 @@ func extractQueryText(content string, pos protocol.Position, ctxType CompletionC
 		return trimmed
 
 	case ContextPayee:
-		_, after, found := strings.Cut(beforeCursor, " ")
-		if !found {
+		wsIdx := indexFirstWhitespace(beforeCursor)
+		if wsIdx == -1 {
 			return ""
 		}
-		return strings.TrimLeft(after, " ")
+		return strings.TrimLeft(beforeCursor[wsIdx+1:], " \t")
 
 	case ContextCommodity:
 		if after, found := strings.CutPrefix(beforeCursor, directiveCommodity); found {
