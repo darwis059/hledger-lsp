@@ -969,3 +969,18 @@ end apply account
 	assert.Contains(t, result, "revenue")
 	assert.NotContains(t, result, "business:revenue")
 }
+
+func TestFormatDocument_PrefixCommodityAfterBareNumber(t *testing.T) {
+	input := "2024-01-15 test\n    Расходы:Продукты  698,43\n    Активы:Альфа  RUB100,00\n    Активы:Бета  RUB11,00"
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs, "expected no parse errors, got: %v", errs)
+	require.Len(t, journal.Transactions, 1)
+
+	edits := FormatDocument(journal, input)
+
+	result := applyEdits(input, edits)
+	assert.Contains(t, result, "698,43", "bare number amount must survive formatting")
+	assert.Contains(t, result, "RUB100,00", "prefix commodity amount must survive formatting")
+	assert.Contains(t, result, "RUB11,00", "prefix commodity amount must survive formatting")
+}

@@ -1918,3 +1918,28 @@ end apply account
 	assert.Equal(t, "revenue", tx.Postings[0].Account.ResolvedName)
 	assert.Equal(t, "checking", tx.Postings[1].Account.ResolvedName)
 }
+
+func TestParser_PrefixCommodityAfterBareNumber(t *testing.T) {
+	input := "2024-01-15 test\n    Расходы:Продукты  698,43\n    Активы:Альфа  RUB100,00\n    Активы:Бета  RUB11,00"
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs, "expected no parse errors, got: %v", errs)
+	require.Len(t, journal.Transactions, 1)
+
+	tx := journal.Transactions[0]
+	require.Len(t, tx.Postings, 3)
+
+	p1 := tx.Postings[0]
+	require.NotNil(t, p1.Amount, "first posting amount should not be nil")
+	assert.Equal(t, "698,43", p1.Amount.RawQuantity)
+
+	p2 := tx.Postings[1]
+	require.NotNil(t, p2.Amount, "second posting amount should not be nil")
+	assert.Equal(t, "RUB", p2.Amount.Commodity.Symbol)
+	assert.Equal(t, "100,00", p2.Amount.RawQuantity)
+
+	p3 := tx.Postings[2]
+	require.NotNil(t, p3.Amount, "third posting amount should not be nil")
+	assert.Equal(t, "RUB", p3.Amount.Commodity.Symbol)
+	assert.Equal(t, "11,00", p3.Amount.RawQuantity)
+}

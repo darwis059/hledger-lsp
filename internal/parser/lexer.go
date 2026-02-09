@@ -259,6 +259,8 @@ func (l *Lexer) scanIndent() Token {
 	value := l.input[start:l.pos]
 	// Indent indicates start of posting line (account + amount) or subdirective
 	l.afterIndent = true
+	l.afterNumber = false
+	l.afterSign = false
 	if !l.inDirective {
 		l.onPostingLine = true // Only for transactions
 	}
@@ -273,6 +275,8 @@ func (l *Lexer) scanNewline() Token {
 	l.atStart = true
 	l.afterIndent = false
 	l.onPostingLine = false
+	l.afterNumber = false
+	l.afterSign = false
 	// Check if next line starts at column 1 (not indented) - this ends the transaction or directive
 	if l.pos < len(l.input) && !l.isWhitespace(l.peek()) {
 		l.inTransaction = false

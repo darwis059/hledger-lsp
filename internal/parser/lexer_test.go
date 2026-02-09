@@ -1719,3 +1719,80 @@ func TestLexer_AccountDirectiveWithSubdirectives(t *testing.T) {
 		})
 	}
 }
+
+func TestLexer_AfterNumberResetAcrossLines(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []Token
+	}{
+		{
+			name:  "bare number then prefix commodity on next line",
+			input: "2024-01-15 test\n    Расходы:Продукты  698,43\n    Активы:Альфа  RUB100,00",
+			want: []Token{
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenText, Value: "test"},
+				{Type: TokenNewline},
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "Расходы:Продукты"},
+				{Type: TokenNumber, Value: "698,43"},
+				{Type: TokenNewline},
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "Активы:Альфа"},
+				{Type: TokenCommodity, Value: "RUB"},
+				{Type: TokenNumber, Value: "100,00"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "suffix commodity then prefix commodity on next line",
+			input: "2024-01-15 test\n    Расходы:Продукты  698,43 USD\n    Активы:Альфа  RUB100,00",
+			want: []Token{
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenText, Value: "test"},
+				{Type: TokenNewline},
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "Расходы:Продукты"},
+				{Type: TokenNumber, Value: "698,43"},
+				{Type: TokenCommodity, Value: "USD"},
+				{Type: TokenNewline},
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "Активы:Альфа"},
+				{Type: TokenCommodity, Value: "RUB"},
+				{Type: TokenNumber, Value: "100,00"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "three postings: bare number, prefix commodity, prefix commodity",
+			input: "2024-01-15 test\n    Расходы:Продукты  698,43\n    Активы:Альфа  RUB100,00\n    Активы:Бета  RUB11,00",
+			want: []Token{
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenText, Value: "test"},
+				{Type: TokenNewline},
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "Расходы:Продукты"},
+				{Type: TokenNumber, Value: "698,43"},
+				{Type: TokenNewline},
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "Активы:Альфа"},
+				{Type: TokenCommodity, Value: "RUB"},
+				{Type: TokenNumber, Value: "100,00"},
+				{Type: TokenNewline},
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "Активы:Бета"},
+				{Type: TokenCommodity, Value: "RUB"},
+				{Type: TokenNumber, Value: "11,00"},
+				{Type: TokenEOF},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			tokens := collectTokens(lexer)
+			assertTokenTypesAndValues(t, tt.want, tokens)
+		})
+	}
+}
