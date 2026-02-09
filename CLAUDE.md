@@ -32,7 +32,9 @@ internal/
     token.go                Token types and Position
     lexer.go                Hand-written lexer for hledger format
     parser.go               Parser with error recovery
-  server/server.go          LSP server: document sync, diagnostics
+  server/
+    server.go               LSP server: document sync, diagnostics
+    completion.go           Completion: context detection, item generation, fuzzy scoring
 ```
 
 ### Data Flow

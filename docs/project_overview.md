@@ -65,12 +65,7 @@ hledger-lsp — LSP-сервер для journal-файлов hledger на Go. О
 
 ## Пробелы и незавершенные функции
 
-- Go to Definition — нет.
-- Find References — нет.
-- Completion для тегов — отложено.
-- Completion для дат — отложено.
 - Диагностика дублей транзакций — отложено.
-- FR из PRD: template completion, приоритизация по частоте, лимит результатов, workspace-wide completions — не подтверждены как реализованные.
 
 ## Риски и текущие mitigations (по PRD)
 
