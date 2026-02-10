@@ -369,6 +369,22 @@ func TestServer_DidSave(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestServer_DidSave_InvalidatesAlignmentCache(t *testing.T) {
+	srv := NewServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+
+	srv.alignmentCache.Store(uri, 42)
+
+	params := &protocol.DidSaveTextDocumentParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+	}
+	err := srv.DidSave(context.Background(), params)
+	assert.NoError(t, err)
+
+	_, loaded := srv.alignmentCache.Load(uri)
+	assert.False(t, loaded, "alignmentCache should be invalidated on DidSave")
+}
+
 func TestApplyChange(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -132,6 +132,10 @@ func (s *Server) setSettings(settings serverSettings) {
 	if oldSettings.CLI.Path != settings.CLI.Path || oldSettings.CLI.Timeout != settings.CLI.Timeout {
 		s.reinitCLI(settings.CLI)
 	}
+	if oldSettings.Formatting.IndentSize != settings.Formatting.IndentSize ||
+		oldSettings.Formatting.MinAlignmentColumn != settings.Formatting.MinAlignmentColumn {
+		s.clearAlignmentCache()
+	}
 }
 
 func (s *Server) getSettings() serverSettings {

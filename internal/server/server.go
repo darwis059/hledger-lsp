@@ -242,6 +242,13 @@ func isFullChange(r protocol.Range) bool {
 		r.End.Line == 0 && r.End.Character == 0
 }
 
+func (s *Server) clearAlignmentCache() {
+	s.alignmentCache.Range(func(key, _ any) bool {
+		s.alignmentCache.Delete(key)
+		return true
+	})
+}
+
 func (s *Server) DidClose(ctx context.Context, params *protocol.DidCloseTextDocumentParams) error {
 	s.documents.Delete(params.TextDocument.URI)
 	s.alignmentCache.Delete(params.TextDocument.URI)
@@ -251,6 +258,7 @@ func (s *Server) DidClose(ctx context.Context, params *protocol.DidCloseTextDocu
 
 func (s *Server) DidSave(ctx context.Context, params *protocol.DidSaveTextDocumentParams) error {
 	s.payeeTemplatesCache.Delete(params.TextDocument.URI)
+	s.alignmentCache.Delete(params.TextDocument.URI)
 
 	if s.workspace != nil {
 		if path := uriToPath(params.TextDocument.URI); path != "" {

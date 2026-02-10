@@ -353,3 +353,33 @@ func TestServer_SetSettings_UpdatesCLI(t *testing.T) {
 		t.Errorf("CLI.Timeout = %v, want %v", result.CLI.Timeout, 60*time.Second)
 	}
 }
+
+func TestServer_SetSettings_ClearsAlignmentCacheOnFormattingChange(t *testing.T) {
+	srv := NewServer()
+	uri := "file:///test.journal"
+	srv.alignmentCache.Store(uri, 42)
+
+	settings := srv.getSettings()
+	settings.Formatting.MinAlignmentColumn = 50
+	srv.setSettings(settings)
+
+	_, loaded := srv.alignmentCache.Load(uri)
+	if loaded {
+		t.Error("alignmentCache should be cleared when formatting settings change")
+	}
+}
+
+func TestServer_SetSettings_KeepsAlignmentCacheWhenFormattingUnchanged(t *testing.T) {
+	srv := NewServer()
+	uri := "file:///test.journal"
+	srv.alignmentCache.Store(uri, 42)
+
+	settings := srv.getSettings()
+	settings.CLI.Path = "/other/hledger"
+	srv.setSettings(settings)
+
+	val, loaded := srv.alignmentCache.Load(uri)
+	if !loaded || val.(int) != 42 {
+		t.Error("alignmentCache should be preserved when formatting settings don't change")
+	}
+}
