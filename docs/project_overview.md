@@ -1,91 +1,91 @@
-# Обзор проекта hledger-lsp
+# hledger-lsp Project Overview
 
-## Назначение и контекст
+## Purpose and Context
 
-hledger-lsp — LSP-сервер для journal-файлов hledger на Go. Он дает редакторам функции IDE (completion, diagnostics, formatting и т.д.) и устраняет зависимость от VS Code‑расширения, делая hledger удобным в любых LSP‑совместимых редакторах.
+hledger-lsp is an LSP server for hledger journal files written in Go. It provides IDE-like features (completion, diagnostics, formatting, etc.) to any LSP-compatible editor, eliminating the dependency on the VS Code extension and making hledger convenient in Neovim, Emacs, Helix, and others.
 
-Целевая аудитория:
+Target audience:
 
-- пользователи hledger в Neovim/Emacs/Helix и др.;
-- команды, которым нужны единые правила проверки и форматирования.
+- hledger users in Neovim/Emacs/Helix and other editors;
+- teams that need consistent validation and formatting rules.
 
-## Реализованные функции (по README/tasks)
+## Implemented Features (per README/tasks)
 
-- Completion: счета, плательщики, валюты.
-- Diagnostics: баланс, синтаксис, базовые проверки.
-- Formatting: выравнивание сумм и отступы (full, range, onType).
-- Hover: балансы и детали транзакций.
-- Semantic tokens: подсветка синтаксиса.
-- Document symbols: транзакции, директивы, include.
-- Include: разрешение путей, детекция циклов.
-- CLI code actions: запуск отчетов hledger.
+- Completion: accounts, payees, commodities.
+- Diagnostics: balance, syntax, basic checks.
+- Formatting: amount alignment and indentation (full, range, onType).
+- Hover: balances and transaction details.
+- Semantic tokens: syntax highlighting.
+- Document symbols: transactions, directives, include.
+- Include: path resolution, cycle detection.
+- CLI code actions: running hledger reports.
 
-## Архитектура и модули
+## Architecture and Modules
 
-Ключевые папки:
+Key directories:
 
-- `cmd/` — entrypoint сервера.
-- `internal/parser` — лексер/парсер и AST.
-- `internal/analyzer` — семантика, баланс, индексация.
+- `cmd/` — server entry point.
+- `internal/parser` — lexer/parser and AST.
+- `internal/analyzer` — semantics, balance, indexing.
 - `internal/server` — LSP handlers.
-- `internal/formatter` — форматирование.
+- `internal/formatter` — formatting.
 - `internal/include` — include resolution.
-- `internal/cli` — обертка для hledger CLI.
-- `internal/workspace` — агрегация данных по файлам.
+- `internal/cli` — hledger CLI wrapper.
+- `internal/workspace` — cross-file data aggregation.
 
-Цепочка обработки: парсинг → анализ → диагностика/подсветка/hover/completion.
+Processing pipeline: parsing → analysis → diagnostics/highlighting/hover/completion.
 
-## Модель индекса символов и источники данных
+## Symbol Index Model and Data Sources
 
-Сейчас индексируются:
+Currently indexed:
 
-- accounts: `AccountIndex` с `All` и `ByPrefix` для автодополнения по префиксу;
-- payees: уникальные значения из транзакций;
-- commodities: директивы и суммы/стоимости в postings;
-- tags: теги из AST (теги из комментариев пока не извлекаются).
+- accounts: `AccountIndex` with `All` and `ByPrefix` for prefix-based completion;
+- payees: unique values from transactions;
+- commodities: directives and amounts/costs in postings;
+- tags: tags from AST (tags from comments are not yet extracted).
 
-Источники данных:
+Data sources:
 
-- AST из `internal/parser` (директивы account/commodity, транзакции и postings);
-- include-дерево через `internal/include.Loader` и `ResolvedJournal` (Primary + Files).
+- AST from `internal/parser` (account/commodity directives, transactions, and postings);
+- include tree via `internal/include.Loader` and `ResolvedJournal` (Primary + Files).
 
-Разделение анализов:
+Analysis separation:
 
-- `Analyze` обрабатывает один `Journal`;
-- `AnalyzeResolved` агрегирует символы по include-дереву, объединяя данные всех файлов.
+- `Analyze` processes a single `Journal`;
+- `AnalyzeResolved` aggregates symbols across the include tree, merging data from all files.
 
-Кэши workspace:
+Workspace caches:
 
-- declared accounts/commodities и форматы чисел из commodity‑директив;
-- используются для быстрых проверок и форматирования без полного пересчета.
+- declared accounts/commodities and number formats from commodity directives;
+- used for fast checks and formatting without full recomputation.
 
-Ограничения:
+Limitations:
 
-- нет индекса транзакций и связей для references/duplicates (задел для задач 2–4).
+- no transaction index or relationship tracking for references/duplicates (groundwork for tasks 2–4).
 
-## Пробелы и незавершенные функции
+## Gaps and Incomplete Features
 
-- Диагностика дублей транзакций — отложено.
+- Duplicate transaction diagnostics — deferred.
 
-## Риски и текущие mitigations (по PRD)
+## Risks and Current Mitigations (per PRD)
 
-Риски:
+Risks:
 
-- производительность на больших файлах;
-- сложность формата hledger;
-- совместимость с CLI.
+- performance on large files;
+- hledger format complexity;
+- CLI compatibility.
 
-Mitigations, уже отмеченные в проекте:
+Mitigations already in place:
 
-- бенчмарки и инкрементальные обновления;
-- hand-written parser и тесты;
+- benchmarks and incremental updates;
+- hand-written parser and tests;
 - include cycle detection;
-- lint/CI и защитные проверки.
+- lint/CI and defensive checks.
 
-## Предложения по доработке
+## Improvement Suggestions
 
-- Go to Definition/Find References: индекс символов в `internal/analyzer`/`internal/workspace` + новые LSP handlers в `internal/server`.
-- Completion tags/dates/templates: расширить completion provider и контекстные правила.
-- Дубликаты транзакций: детекция по хэшу транзакций в анализаторе.
-- Workspace-wide completion: общий индекс по include‑дереву.
-- Производительность: расширить бенчмарки, ввести конфиг‑лимиты (max results, file size, include depth).
+- Go to Definition/Find References: symbol index in `internal/analyzer`/`internal/workspace` + new LSP handlers in `internal/server`.
+- Completion for tags/dates/templates: extend completion provider and context rules.
+- Duplicate transactions: detection via transaction hashing in the analyzer.
+- Workspace-wide completion: shared index across the include tree.
+- Performance: expand benchmarks, introduce config limits (max results, file size, include depth).
