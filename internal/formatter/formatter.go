@@ -56,7 +56,7 @@ func FormatDocumentWithOptions(journal *ast.Journal, content string, commodityFo
 	if len(journal.Transactions) > 0 {
 		globalAccountCol := 0
 		if opts.AlignAmounts {
-			globalAccountCol = calculateGlobalAlignmentColumnWithIndent(journal.Transactions, opts.IndentSize)
+			globalAccountCol = CalculateGlobalAlignmentColumnWithIndent(journal.Transactions, opts.IndentSize)
 			if opts.MinAlignmentColumn > 0 && globalAccountCol < opts.MinAlignmentColumn-1 {
 				globalAccountCol = opts.MinAlignmentColumn - 1
 			}
@@ -210,7 +210,7 @@ func CalculateGlobalAlignmentColumn(transactions []ast.Transaction) int {
 	return utf8.RuneCountInString(defaultIndent) + maxLen + minSpaces
 }
 
-func calculateGlobalAlignmentColumnWithIndent(transactions []ast.Transaction, indentSize int) int {
+func CalculateGlobalAlignmentColumnWithIndent(transactions []ast.Transaction, indentSize int) int {
 	maxLen := 0
 	for i := range transactions {
 		for j := range transactions[i].Postings {

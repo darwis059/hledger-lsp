@@ -6,19 +6,80 @@ import (
 
 	"go.lsp.dev/protocol"
 
+	"github.com/juev/hledger-lsp/internal/formatter"
 	"github.com/juev/hledger-lsp/internal/lsputil"
+	"github.com/juev/hledger-lsp/internal/parser"
 )
 
-func (s *Server) OnTypeFormatting(_ context.Context, params *protocol.DocumentOnTypeFormattingParams) ([]protocol.TextEdit, error) {
-	if params.Ch != "\n" {
-		return nil, nil
+type lineKind int
+
+const (
+	lineEmpty lineKind = iota
+	lineWhitespaceOnly
+	lineTransactionHeader
+	linePosting
+	lineDirective
+	lineComment
+)
+
+var directiveKeywords = map[string]struct{}{
+	"account": {}, "alias": {}, "apply": {}, "assert": {}, "bucket": {}, "capture": {},
+	"check": {}, "comment": {}, "commodity": {}, "D": {}, "decimal-mark": {}, "def": {},
+	"define": {}, "end": {}, "eval": {}, "expr": {}, "include": {}, "payee": {}, "P": {},
+	"tag": {}, "test": {}, "Y": {}, "year": {},
+}
+
+func classifyLine(line string) lineKind {
+	if len(line) == 0 {
+		return lineEmpty
 	}
 
+	if strings.TrimSpace(line) == "" {
+		return lineWhitespaceOnly
+	}
+
+	first := line[0]
+
+	if first == ' ' || first == '\t' {
+		return linePosting
+	}
+
+	if first == ';' || first == '#' || first == '*' {
+		return lineComment
+	}
+
+	if first >= '0' && first <= '9' || first == '~' || first == '=' {
+		return lineTransactionHeader
+	}
+
+	word := line
+	if idx := strings.IndexAny(line, " \t"); idx != -1 {
+		word = line[:idx]
+	}
+	if _, ok := directiveKeywords[word]; ok {
+		return lineDirective
+	}
+
+	return lineDirective
+}
+
+func (s *Server) OnTypeFormatting(ctx context.Context, params *protocol.DocumentOnTypeFormattingParams) ([]protocol.TextEdit, error) {
 	doc, ok := s.GetDocument(params.TextDocument.URI)
 	if !ok {
 		return nil, nil
 	}
 
+	switch params.Ch {
+	case "\n":
+		return s.onTypeNewline(doc, params)
+	case "\t":
+		return s.onTypeTab(doc, params)
+	default:
+		return nil, nil
+	}
+}
+
+func (s *Server) onTypeNewline(doc string, params *protocol.DocumentOnTypeFormattingParams) ([]protocol.TextEdit, error) {
 	line := int(params.Position.Line)
 	if line == 0 {
 		return nil, nil
@@ -26,16 +87,17 @@ func (s *Server) OnTypeFormatting(_ context.Context, params *protocol.DocumentOn
 
 	lines := splitLines(doc)
 	prevLine := lines[line-1]
-	trimmed := strings.TrimSpace(prevLine)
 
 	settings := s.getSettings()
 	indent := strings.Repeat(" ", settings.Formatting.IndentSize)
 
+	kind := classifyLine(prevLine)
 	var newIndent string
-	if trimmed == "" {
-		newIndent = ""
-	} else {
+	switch kind {
+	case lineTransactionHeader, linePosting:
 		newIndent = indent
+	default:
+		newIndent = ""
 	}
 
 	var currentLineLen uint32
@@ -52,5 +114,49 @@ func (s *Server) OnTypeFormatting(_ context.Context, params *protocol.DocumentOn
 			End:   protocol.Position{Line: uint32(line), Character: currentLineLen},
 		},
 		NewText: newIndent,
+	}}, nil
+}
+
+func (s *Server) onTypeTab(doc string, params *protocol.DocumentOnTypeFormattingParams) ([]protocol.TextEdit, error) {
+	line := int(params.Position.Line)
+	lines := splitLines(doc)
+
+	if line >= len(lines) {
+		return nil, nil
+	}
+
+	if classifyLine(lines[line]) != linePosting {
+		return nil, nil
+	}
+
+	journal, _ := parser.Parse(doc)
+	if len(journal.Transactions) == 0 {
+		return nil, nil
+	}
+
+	settings := s.getSettings()
+	alignCol := formatter.CalculateGlobalAlignmentColumnWithIndent(journal.Transactions, settings.Formatting.IndentSize)
+	if settings.Formatting.MinAlignmentColumn > 0 && alignCol < settings.Formatting.MinAlignmentColumn-1 {
+		alignCol = settings.Formatting.MinAlignmentColumn - 1
+	}
+
+	cursorChar := int(params.Position.Character)
+	tabPos := cursorChar - 1
+	if tabPos < 0 {
+		return nil, nil
+	}
+
+	if tabPos >= alignCol {
+		return nil, nil
+	}
+
+	spacesNeeded := alignCol - tabPos
+
+	return []protocol.TextEdit{{
+		Range: protocol.Range{
+			Start: protocol.Position{Line: uint32(line), Character: uint32(tabPos)},
+			End:   protocol.Position{Line: uint32(line), Character: uint32(cursorChar)},
+		},
+		NewText: strings.Repeat(" ", spacesNeeded),
 	}}, nil
 }

@@ -113,6 +113,7 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 		caps.DocumentRangeFormattingProvider = true
 		caps.DocumentOnTypeFormattingProvider = &protocol.DocumentOnTypeFormattingOptions{
 			FirstTriggerCharacter: "\n",
+			MoreTriggerCharacter:  []string{"\t"},
 		}
 	}
 	if settings.Features.SemanticTokens {

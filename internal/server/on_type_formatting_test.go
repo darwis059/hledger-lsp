@@ -95,7 +95,7 @@ func TestOnTypeFormatting_AfterDirective(t *testing.T) {
 	edits, err := ts.onTypeFormatting(uri, 1, "\n")
 	require.NoError(t, err)
 	require.Len(t, edits, 1)
-	assert.Equal(t, "    ", edits[0].NewText)
+	assert.Equal(t, "", edits[0].NewText)
 }
 
 func TestOnTypeFormatting_CustomIndentSize(t *testing.T) {
@@ -162,4 +162,184 @@ func TestOnTypeFormatting_ReplacesEditorAutoIndent(t *testing.T) {
 	assert.Equal(t, "    ", edits[0].NewText)
 	assert.Equal(t, uint32(0), edits[0].Range.Start.Character)
 	assert.Equal(t, uint32(8), edits[0].Range.End.Character)
+}
+
+func TestOnTypeFormatting_AfterComment(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "; this is a comment\n"
+
+	ts.StoreDocument(uri, content)
+
+	edits, err := ts.onTypeFormatting(uri, 1, "\n")
+	require.NoError(t, err)
+	require.Len(t, edits, 1)
+	assert.Equal(t, "", edits[0].NewText)
+}
+
+func TestOnTypeFormatting_AfterPeriodicTransaction(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "~ monthly\n"
+
+	ts.StoreDocument(uri, content)
+
+	edits, err := ts.onTypeFormatting(uri, 1, "\n")
+	require.NoError(t, err)
+	require.Len(t, edits, 1)
+	assert.Equal(t, "    ", edits[0].NewText)
+}
+
+func TestOnTypeFormatting_AfterAutoPostingRule(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "= expenses\n"
+
+	ts.StoreDocument(uri, content)
+
+	edits, err := ts.onTypeFormatting(uri, 1, "\n")
+	require.NoError(t, err)
+	require.Len(t, edits, 1)
+	assert.Equal(t, "    ", edits[0].NewText)
+}
+
+func TestOnTypeFormatting_AfterIncludeDirective(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "include foo.journal\n"
+
+	ts.StoreDocument(uri, content)
+
+	edits, err := ts.onTypeFormatting(uri, 1, "\n")
+	require.NoError(t, err)
+	require.Len(t, edits, 1)
+	assert.Equal(t, "", edits[0].NewText)
+}
+
+func TestOnTypeFormatting_AfterCommodityDirective(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "commodity EUR\n"
+
+	ts.StoreDocument(uri, content)
+
+	edits, err := ts.onTypeFormatting(uri, 1, "\n")
+	require.NoError(t, err)
+	require.Len(t, edits, 1)
+	assert.Equal(t, "", edits[0].NewText)
+}
+
+func (ts *testServer) onTypeFormattingTab(uri protocol.DocumentURI, line, character uint32) ([]protocol.TextEdit, error) {
+	params := &protocol.DocumentOnTypeFormattingParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+		Position:     protocol.Position{Line: line, Character: character},
+		Ch:           "\t",
+	}
+	return ts.OnTypeFormatting(context.Background(), params)
+}
+
+func TestOnTypeFormatting_Tab_OnPostingLine(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "2024-01-15 grocery store\n    expenses:food\t\n    assets:cash\n"
+
+	ts.StoreDocument(uri, content)
+
+	edits, err := ts.onTypeFormattingTab(uri, 1, 18)
+	require.NoError(t, err)
+	require.Len(t, edits, 1)
+
+	assert.Equal(t, uint32(1), edits[0].Range.Start.Line)
+	assert.Equal(t, uint32(17), edits[0].Range.Start.Character)
+	assert.Equal(t, uint32(18), edits[0].Range.End.Character)
+	assert.True(t, len(edits[0].NewText) > 0)
+	assert.True(t, strings.TrimSpace(edits[0].NewText) == "")
+}
+
+func TestOnTypeFormatting_Tab_NotOnPostingLine(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "2024-01-15 grocery store\t\n    expenses:food  $50.00\n"
+
+	ts.StoreDocument(uri, content)
+
+	edits, err := ts.onTypeFormattingTab(uri, 0, 25)
+	require.NoError(t, err)
+	assert.Nil(t, edits)
+}
+
+func TestOnTypeFormatting_Tab_PastAlignmentColumn(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "2024-01-15 grocery store\n    expenses:food                                      \t\n"
+
+	ts.StoreDocument(uri, content)
+
+	edits, err := ts.onTypeFormattingTab(uri, 1, 55)
+	require.NoError(t, err)
+	assert.Nil(t, edits)
+}
+
+func TestOnTypeFormatting_Tab_UsesGlobalAlignment(t *testing.T) {
+	ts := newTestServer()
+	settings := ts.getSettings()
+	settings.Formatting.MinAlignmentColumn = 0
+	ts.setSettings(settings)
+
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "2024-01-15 grocery store\n    expenses:food:groceries:organic\t\n    assets:cash\n\n2024-01-16 restaurant\n    expenses:food\t\n    assets:cash\n"
+
+	ts.StoreDocument(uri, content)
+
+	edits1, err := ts.onTypeFormattingTab(uri, 1, 37)
+	require.NoError(t, err)
+	require.Len(t, edits1, 1)
+
+	edits2, err := ts.onTypeFormattingTab(uri, 5, 18)
+	require.NoError(t, err)
+	require.Len(t, edits2, 1)
+
+	col1 := int(edits1[0].Range.Start.Character) + len(edits1[0].NewText)
+	col2 := int(edits2[0].Range.Start.Character) + len(edits2[0].NewText)
+	assert.Equal(t, col1, col2, "both postings should align to the same global column")
+}
+
+func TestOnTypeFormatting_Tab_RespectsMinAlignment(t *testing.T) {
+	ts := newTestServer()
+	settings := ts.getSettings()
+	settings.Formatting.MinAlignmentColumn = 50
+	ts.setSettings(settings)
+
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "2024-01-15 grocery store\n    expenses:food\t\n    assets:cash\n"
+
+	ts.StoreDocument(uri, content)
+
+	edits, err := ts.onTypeFormattingTab(uri, 1, 18)
+	require.NoError(t, err)
+	require.Len(t, edits, 1)
+
+	endCol := int(edits[0].Range.Start.Character) + len(edits[0].NewText)
+	assert.Equal(t, 49, endCol)
+}
+
+func TestOnTypeFormatting_Tab_NoTransactions(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "    expenses:food\t\n"
+
+	ts.StoreDocument(uri, content)
+
+	edits, err := ts.onTypeFormattingTab(uri, 0, 18)
+	require.NoError(t, err)
+	assert.Nil(t, edits)
+}
+
+func TestOnTypeFormatting_Tab_DocumentNotFound(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///nonexistent.journal")
+
+	edits, err := ts.onTypeFormattingTab(uri, 1, 10)
+	require.NoError(t, err)
+	assert.Nil(t, edits)
 }

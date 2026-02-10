@@ -56,14 +56,14 @@ func (s *Server) CompletionResolve(_ context.Context, item *protocol.CompletionI
 	if !ok {
 		rawBytes, err := json.Marshal(item.Data)
 		if err != nil {
-			return item, nil
+			return item, err
 		}
 		raw = rawBytes
 	}
 
 	var data completionResolveData
 	if err := json.Unmarshal(raw, &data); err != nil {
-		return item, nil
+		return item, err
 	}
 
 	if data.Kind == "" {
