@@ -343,3 +343,27 @@ func TestOnTypeFormatting_Tab_DocumentNotFound(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, edits)
 }
+
+func TestOnTypeFormatting_NewlineBeyondDocumentEnd(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "2024-01-15 grocery store\n"
+
+	ts.StoreDocument(uri, content)
+
+	edits, err := ts.onTypeFormatting(uri, 100, "\n")
+	require.NoError(t, err)
+	assert.Nil(t, edits)
+}
+
+func TestOnTypeFormatting_Tab_BeyondDocumentEnd(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "2024-01-15 grocery store\n    expenses:food\n"
+
+	ts.StoreDocument(uri, content)
+
+	edits, err := ts.onTypeFormattingTab(uri, 100, 10)
+	require.NoError(t, err)
+	assert.Nil(t, edits)
+}

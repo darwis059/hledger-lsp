@@ -20,6 +20,7 @@ const (
 	linePosting
 	lineDirective
 	lineComment
+	lineOther
 )
 
 var directiveKeywords = map[string]struct{}{
@@ -60,7 +61,7 @@ func classifyLine(line string) lineKind {
 		return lineDirective
 	}
 
-	return lineDirective
+	return lineOther
 }
 
 func (s *Server) OnTypeFormatting(ctx context.Context, params *protocol.DocumentOnTypeFormattingParams) ([]protocol.TextEdit, error) {
@@ -86,6 +87,9 @@ func (s *Server) onTypeNewline(doc string, params *protocol.DocumentOnTypeFormat
 	}
 
 	lines := splitLines(doc)
+	if line-1 >= len(lines) {
+		return nil, nil
+	}
 	prevLine := lines[line-1]
 
 	settings := s.getSettings()
@@ -129,15 +133,9 @@ func (s *Server) onTypeTab(doc string, params *protocol.DocumentOnTypeFormatting
 		return nil, nil
 	}
 
-	journal, _ := parser.Parse(doc)
-	if len(journal.Transactions) == 0 {
+	alignCol := s.getAlignmentColumn(doc, params.TextDocument.URI)
+	if alignCol <= 0 {
 		return nil, nil
-	}
-
-	settings := s.getSettings()
-	alignCol := formatter.CalculateGlobalAlignmentColumnWithIndent(journal.Transactions, settings.Formatting.IndentSize)
-	if settings.Formatting.MinAlignmentColumn > 0 && alignCol < settings.Formatting.MinAlignmentColumn-1 {
-		alignCol = settings.Formatting.MinAlignmentColumn - 1
 	}
 
 	cursorChar := int(params.Position.Character)
@@ -159,4 +157,24 @@ func (s *Server) onTypeTab(doc string, params *protocol.DocumentOnTypeFormatting
 		},
 		NewText: strings.Repeat(" ", spacesNeeded),
 	}}, nil
+}
+
+func (s *Server) getAlignmentColumn(doc string, uri protocol.DocumentURI) int {
+	if cached, ok := s.alignmentCache.Load(uri); ok {
+		return cached.(int)
+	}
+
+	journal, _ := parser.Parse(doc)
+	if len(journal.Transactions) == 0 {
+		return 0
+	}
+
+	settings := s.getSettings()
+	alignCol := formatter.CalculateGlobalAlignmentColumnWithIndent(journal.Transactions, settings.Formatting.IndentSize)
+	if settings.Formatting.MinAlignmentColumn > 0 && alignCol < settings.Formatting.MinAlignmentColumn-1 {
+		alignCol = settings.Formatting.MinAlignmentColumn - 1
+	}
+
+	s.alignmentCache.Store(uri, alignCol)
+	return alignCol
 }

@@ -32,6 +32,7 @@ type Server struct {
 	settingsMu            sync.RWMutex
 	supportsConfiguration bool
 	payeeTemplatesCache   sync.Map // map[protocol.DocumentURI]map[string][]analyzer.PostingTemplate
+	alignmentCache        sync.Map // map[protocol.DocumentURI]int
 }
 
 func NewServer() *Server {
@@ -205,6 +206,7 @@ func (s *Server) Exit(ctx context.Context) error {
 
 func (s *Server) DidOpen(ctx context.Context, params *protocol.DidOpenTextDocumentParams) error {
 	s.documents.Store(params.TextDocument.URI, params.TextDocument.Text)
+	s.alignmentCache.Delete(params.TextDocument.URI)
 	go s.publishDiagnostics(ctx, params.TextDocument.URI, params.TextDocument.Text)
 	return nil
 }
@@ -223,6 +225,7 @@ func (s *Server) DidChange(ctx context.Context, params *protocol.DidChangeTextDo
 			}
 		}
 		s.documents.Store(params.TextDocument.URI, content)
+		s.alignmentCache.Delete(params.TextDocument.URI)
 		if s.workspace != nil {
 			if path := uriToPath(params.TextDocument.URI); path != "" {
 				s.workspace.UpdateFile(path, content)
@@ -241,6 +244,7 @@ func isFullChange(r protocol.Range) bool {
 
 func (s *Server) DidClose(ctx context.Context, params *protocol.DidCloseTextDocumentParams) error {
 	s.documents.Delete(params.TextDocument.URI)
+	s.alignmentCache.Delete(params.TextDocument.URI)
 	tokenCache.delete(params.TextDocument.URI)
 	return nil
 }

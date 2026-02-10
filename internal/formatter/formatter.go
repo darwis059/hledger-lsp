@@ -210,6 +210,8 @@ func CalculateGlobalAlignmentColumn(transactions []ast.Transaction) int {
 	return utf8.RuneCountInString(defaultIndent) + maxLen + minSpaces
 }
 
+// CalculateGlobalAlignmentColumnWithIndent returns the column at which amounts
+// should be aligned, using the given indentSize instead of the default indent.
 func CalculateGlobalAlignmentColumnWithIndent(transactions []ast.Transaction, indentSize int) int {
 	maxLen := 0
 	for i := range transactions {
