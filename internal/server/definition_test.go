@@ -195,6 +195,79 @@ func TestDefinition_CommodityOnRight(t *testing.T) {
 	assert.Equal(t, uint32(0), result[0].Range.Start.Line) // commodity directive is on line 0
 }
 
+func TestDefinition_CursorOnAccountDirective(t *testing.T) {
+	srv := NewServer()
+	content := `account expenses:food
+
+2024-01-15 grocery
+    expenses:food  $50
+    assets:cash`
+
+	uri := protocol.DocumentURI("file:///test.journal")
+	srv.documents.Store(uri, content)
+
+	params := &protocol.DefinitionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+			Position:     protocol.Position{Line: 0, Character: 10}, // on "expenses:food" in directive
+		},
+	}
+
+	result, err := srv.Definition(context.Background(), params)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, uint32(0), result[0].Range.Start.Line)
+}
+
+func TestDefinition_CursorOnCommodityDirective(t *testing.T) {
+	srv := NewServer()
+	content := `commodity $
+    format 1,000.00
+
+2024-01-15 grocery
+    expenses:food  $50
+    assets:cash`
+
+	uri := protocol.DocumentURI("file:///test.journal")
+	srv.documents.Store(uri, content)
+
+	params := &protocol.DefinitionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+			Position:     protocol.Position{Line: 0, Character: 10}, // on "$" in commodity directive
+		},
+	}
+
+	result, err := srv.Definition(context.Background(), params)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, uint32(0), result[0].Range.Start.Line)
+}
+
+func TestDefinition_CursorOnPayeeDirective(t *testing.T) {
+	srv := NewServer()
+	content := `payee Grocery Store
+
+2024-01-15 Grocery Store
+    expenses:food  $50
+    assets:cash`
+
+	uri := protocol.DocumentURI("file:///test.journal")
+	srv.documents.Store(uri, content)
+
+	params := &protocol.DefinitionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+			Position:     protocol.Position{Line: 0, Character: 8}, // on "Grocery Store" in payee directive
+		},
+	}
+
+	result, err := srv.Definition(context.Background(), params)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, uint32(2), result[0].Range.Start.Line) // first transaction usage
+}
+
 func TestDefinition_AccountBoundary(t *testing.T) {
 	srv := NewServer()
 	content := `account expenses:food

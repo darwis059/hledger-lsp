@@ -52,6 +52,39 @@ func (s *Server) Definition(ctx context.Context, params *protocol.DefinitionPara
 }
 
 func findDefinitionTarget(journal *ast.Journal, pos protocol.Position) *definitionTarget {
+	for _, dir := range journal.Directives {
+		switch d := dir.(type) {
+		case ast.AccountDirective:
+			accountRange := ensureRangeEnd(d.Account.Range, d.Account.Name)
+			if positionInRange(pos, accountRange) {
+				return &definitionTarget{
+					context:     DefContextAccount,
+					name:        d.Account.Name,
+					symbolRange: astRangeToProtocol(accountRange),
+				}
+			}
+		case ast.CommodityDirective:
+			if d.Commodity.Symbol != "" {
+				commodityRange := ensureRangeEnd(d.Commodity.Range, d.Commodity.Symbol)
+				if positionInRange(pos, commodityRange) {
+					return &definitionTarget{
+						context:     DefContextCommodity,
+						name:        d.Commodity.Symbol,
+						symbolRange: astRangeToProtocol(commodityRange),
+					}
+				}
+			}
+		case ast.PayeeDirective:
+			if d.Name != "" && positionInRange(pos, d.Range) {
+				return &definitionTarget{
+					context:     DefContextPayee,
+					name:        d.Name,
+					symbolRange: astRangeToProtocol(d.Range),
+				}
+			}
+		}
+	}
+
 	for i := range journal.Transactions {
 		tx := &journal.Transactions[i]
 

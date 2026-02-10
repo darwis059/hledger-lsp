@@ -1,0 +1,68 @@
+package server
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"strings"
+
+	"go.lsp.dev/protocol"
+
+	"github.com/juev/hledger-lsp/internal/analyzer"
+	"github.com/juev/hledger-lsp/internal/parser"
+)
+
+func (s *Server) CodeLens(_ context.Context, params *protocol.CodeLensParams) ([]protocol.CodeLens, error) {
+	settings := s.getSettings()
+	if !settings.Features.CodeLens {
+		return nil, nil
+	}
+
+	doc, ok := s.GetDocument(params.TextDocument.URI)
+	if !ok {
+		return nil, nil
+	}
+
+	journal, _ := parser.Parse(doc)
+	if len(journal.Transactions) == 0 {
+		return nil, nil
+	}
+
+	lenses := make([]protocol.CodeLens, 0, len(journal.Transactions))
+
+	for i := range journal.Transactions {
+		tx := &journal.Transactions[i]
+		result := analyzer.CheckBalance(tx)
+
+		title := buildCodeLensTitle(result, len(tx.Postings))
+		lenses = append(lenses, protocol.CodeLens{
+			Range:   *astRangeToProtocol(tx.Date.Range),
+			Command: &protocol.Command{Title: title},
+		})
+	}
+
+	return lenses, nil
+}
+
+func (s *Server) CodeLensResolve(_ context.Context, params *protocol.CodeLens) (*protocol.CodeLens, error) {
+	return params, nil
+}
+
+func buildCodeLensTitle(result *analyzer.BalanceResult, postingCount int) string {
+	if result.Balanced {
+		return fmt.Sprintf("\u2713 balanced | %d postings", postingCount)
+	}
+
+	commodities := make([]string, 0, len(result.Differences))
+	for c := range result.Differences {
+		commodities = append(commodities, c)
+	}
+	sort.Strings(commodities)
+
+	var diffs []string
+	for _, c := range commodities {
+		diffs = append(diffs, fmt.Sprintf("%s off by %s", c, result.Differences[c].String()))
+	}
+
+	return fmt.Sprintf("\u2717 unbalanced: %s", strings.Join(diffs, ", "))
+}

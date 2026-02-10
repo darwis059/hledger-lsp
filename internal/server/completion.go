@@ -51,6 +51,7 @@ func (s *Server) Completion(ctx context.Context, params *protocol.CompletionPara
 	completionCtx := determineCompletionContext(doc, params.Position, params.Context)
 	counts := getCountsForContext(completionCtx, result)
 	items := s.generateCompletionItems(completionCtx, result, doc, params.Position, counts, settings.Completion)
+	attachResolveData(items, completionCtx, params.TextDocument.URI)
 
 	editRange := calculateTextEditRange(doc, params.Position, completionCtx)
 	if editRange != nil {

@@ -22,6 +22,7 @@ type featureSettings struct {
 	DocumentLinks    bool
 	WorkspaceSymbol  bool
 	InlineCompletion bool
+	CodeLens         bool
 }
 
 type completionSettings struct {
@@ -70,6 +71,7 @@ func defaultServerSettings() serverSettings {
 			DocumentLinks:    true,
 			WorkspaceSymbol:  true,
 			InlineCompletion: true,
+			CodeLens:         true,
 		},
 		Completion: completionSettings{
 			MaxResults:    50,
@@ -205,6 +207,9 @@ func applySettingsMap(settings serverSettings, raw map[string]interface{}) serve
 		if value, ok := toBool(featuresRaw["inlineCompletion"]); ok {
 			settings.Features.InlineCompletion = value
 		}
+		if value, ok := toBool(featuresRaw["codeLens"]); ok {
+			settings.Features.CodeLens = value
+		}
 	}
 	if value, ok := toBool(raw["features.hover"]); ok {
 		settings.Features.Hover = value
@@ -235,6 +240,9 @@ func applySettingsMap(settings serverSettings, raw map[string]interface{}) serve
 	}
 	if value, ok := toBool(raw["features.inlineCompletion"]); ok {
 		settings.Features.InlineCompletion = value
+	}
+	if value, ok := toBool(raw["features.codeLens"]); ok {
+		settings.Features.CodeLens = value
 	}
 
 	// Completion

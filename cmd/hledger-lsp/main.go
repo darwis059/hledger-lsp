@@ -100,11 +100,11 @@ func (d *serverDispatcher) CodeAction(ctx context.Context, params *protocol.Code
 }
 
 func (d *serverDispatcher) CodeLens(ctx context.Context, params *protocol.CodeLensParams) ([]protocol.CodeLens, error) {
-	return nil, nil
+	return d.srv.CodeLens(ctx, params)
 }
 
 func (d *serverDispatcher) CodeLensResolve(ctx context.Context, params *protocol.CodeLens) (*protocol.CodeLens, error) {
-	return nil, nil
+	return d.srv.CodeLensResolve(ctx, params)
 }
 
 func (d *serverDispatcher) ColorPresentation(ctx context.Context, params *protocol.ColorPresentationParams) ([]protocol.ColorPresentation, error) {
@@ -116,7 +116,7 @@ func (d *serverDispatcher) Completion(ctx context.Context, params *protocol.Comp
 }
 
 func (d *serverDispatcher) CompletionResolve(ctx context.Context, params *protocol.CompletionItem) (*protocol.CompletionItem, error) {
-	return params, nil
+	return d.srv.CompletionResolve(ctx, params)
 }
 
 func (d *serverDispatcher) Declaration(ctx context.Context, params *protocol.DeclarationParams) ([]protocol.Location, error) {
@@ -136,7 +136,7 @@ func (d *serverDispatcher) DidChangeConfiguration(ctx context.Context, params *p
 }
 
 func (d *serverDispatcher) DidChangeWatchedFiles(ctx context.Context, params *protocol.DidChangeWatchedFilesParams) error {
-	return nil
+	return d.srv.DidChangeWatchedFiles(ctx, params)
 }
 
 func (d *serverDispatcher) DidChangeWorkspaceFolders(ctx context.Context, params *protocol.DidChangeWorkspaceFoldersParams) error {
@@ -160,7 +160,7 @@ func (d *serverDispatcher) DocumentColor(ctx context.Context, params *protocol.D
 }
 
 func (d *serverDispatcher) DocumentHighlight(ctx context.Context, params *protocol.DocumentHighlightParams) ([]protocol.DocumentHighlight, error) {
-	return nil, nil
+	return d.srv.DocumentHighlight(ctx, params)
 }
 
 func (d *serverDispatcher) DocumentLink(ctx context.Context, params *protocol.DocumentLinkParams) ([]protocol.DocumentLink, error) {
@@ -232,7 +232,7 @@ func (d *serverDispatcher) WillSave(ctx context.Context, params *protocol.WillSa
 }
 
 func (d *serverDispatcher) WillSaveWaitUntil(ctx context.Context, params *protocol.WillSaveTextDocumentParams) ([]protocol.TextEdit, error) {
-	return nil, nil
+	return d.srv.WillSaveWaitUntil(ctx, params)
 }
 
 func (d *serverDispatcher) ShowDocument(ctx context.Context, params *protocol.ShowDocumentParams) (*protocol.ShowDocumentResult, error) {
@@ -338,7 +338,7 @@ func (d *serverDispatcher) CodeLensRefresh(ctx context.Context) error {
 }
 
 func (d *serverDispatcher) SelectionRange(ctx context.Context, params *protocol.SelectionRangeParams) ([]protocol.SelectionRange, error) {
-	return nil, nil
+	return d.srv.SelectionRange(ctx, params)
 }
 
 func (d *serverDispatcher) Request(ctx context.Context, method string, params any) (any, error) {

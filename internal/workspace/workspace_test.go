@@ -688,6 +688,39 @@ func TestWorkspace_IndexSnapshot_PayeeTemplates(t *testing.T) {
 	assert.Equal(t, "assets:cash", groceryPostings[1].Account)
 }
 
+func TestWorkspace_GetIncludedBy(t *testing.T) {
+	t.Setenv("LEDGER_FILE", "")
+	t.Setenv("HLEDGER_JOURNAL", "")
+
+	tmpDir := t.TempDir()
+
+	mainPath := filepath.Join(tmpDir, "main.journal")
+	midPath := filepath.Join(tmpDir, "mid.journal")
+	subPath := filepath.Join(tmpDir, "sub.journal")
+
+	mainContent := "include mid.journal\n"
+	midContent := "include sub.journal\n"
+	subContent := "2024-01-01 test\n    expenses:food  $10\n    assets:cash\n"
+
+	require.NoError(t, os.WriteFile(mainPath, []byte(mainContent), 0644))
+	require.NoError(t, os.WriteFile(midPath, []byte(midContent), 0644))
+	require.NoError(t, os.WriteFile(subPath, []byte(subContent), 0644))
+
+	ws := NewWorkspace(tmpDir, include.NewLoader())
+	require.NoError(t, ws.Initialize())
+
+	parents := ws.GetIncludedBy(subPath)
+	assert.Contains(t, parents, midPath)
+	assert.Contains(t, parents, mainPath)
+
+	parents2 := ws.GetIncludedBy(midPath)
+	assert.Contains(t, parents2, mainPath)
+	assert.NotContains(t, parents2, subPath)
+
+	parents3 := ws.GetIncludedBy(mainPath)
+	assert.Empty(t, parents3)
+}
+
 func TestWorkspace_GetCommodityFormats_WithDefaultDirective(t *testing.T) {
 	t.Setenv("LEDGER_FILE", "")
 	t.Setenv("HLEDGER_JOURNAL", "")

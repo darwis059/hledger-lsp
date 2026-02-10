@@ -87,10 +87,13 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 			Save: &protocol.SaveOptions{
 				IncludeText: false,
 			},
+			WillSaveWaitUntil: settings.Features.Formatting,
 		},
-		DocumentSymbolProvider: true,
-		DefinitionProvider:     true,
-		ReferencesProvider:     true,
+		DocumentSymbolProvider:    true,
+		DocumentHighlightProvider: true,
+		SelectionRangeProvider:    true,
+		DefinitionProvider:        true,
+		ReferencesProvider:        true,
 		RenameProvider: &protocol.RenameOptions{
 			PrepareProvider: true,
 		},
@@ -135,6 +138,9 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 		}
 	}
 
+	if settings.Features.CodeLens {
+		caps.CodeLensProvider = &protocol.CodeLensOptions{}
+	}
 	if settings.Features.InlineCompletion {
 		caps.Experimental = map[string]any{
 			"inlineCompletionProvider": true,
@@ -160,7 +166,32 @@ func (s *Server) Initialized(_ context.Context, _ *protocol.InitializedParams) e
 		}
 	}
 	go s.refreshConfiguration(context.Background())
+	s.registerFileWatchers()
 	return nil
+}
+
+func (s *Server) registerFileWatchers() {
+	if s.client == nil {
+		return
+	}
+	watchers := make([]protocol.FileSystemWatcher, 0, 4)
+	for _, pattern := range []string{"**/*.journal", "**/*.hledger", "**/*.j", "**/*.ledger"} {
+		watchers = append(watchers, protocol.FileSystemWatcher{
+			GlobPattern: pattern,
+		})
+	}
+
+	_ = s.client.RegisterCapability(context.Background(), &protocol.RegistrationParams{
+		Registrations: []protocol.Registration{
+			{
+				ID:     "workspace/didChangeWatchedFiles",
+				Method: "workspace/didChangeWatchedFiles",
+				RegisterOptions: protocol.DidChangeWatchedFilesRegistrationOptions{
+					Watchers: watchers,
+				},
+			},
+		},
+	})
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
@@ -369,6 +400,49 @@ func toProtocolSeverity(s analyzer.DiagnosticSeverity) protocol.DiagnosticSeveri
 	}
 }
 
+func (s *Server) DidChangeWatchedFiles(ctx context.Context, params *protocol.DidChangeWatchedFilesParams) error {
+	if s.workspace == nil {
+		return nil
+	}
+
+	affected := make(map[protocol.DocumentURI]bool)
+
+	for _, change := range params.Changes {
+		path := uriToPath(change.URI)
+		if path == "" {
+			continue
+		}
+
+		if _, isOpen := s.documents.Load(change.URI); isOpen {
+			continue
+		}
+
+		s.loader.InvalidateFile(path)
+
+		if change.Type == protocol.FileChangeTypeChanged || change.Type == protocol.FileChangeTypeCreated {
+			if data, err := os.ReadFile(path); err == nil {
+				s.workspace.UpdateFile(path, string(data))
+			}
+		}
+
+		parents := s.workspace.GetIncludedBy(path)
+		for _, parentPath := range parents {
+			parentURI := pathToURI(parentPath)
+			if _, isOpen := s.documents.Load(parentURI); isOpen {
+				affected[parentURI] = true
+			}
+		}
+	}
+
+	for docURI := range affected {
+		if content, ok := s.GetDocument(docURI); ok {
+			s.publishDiagnostics(ctx, docURI, content)
+		}
+	}
+
+	return nil
+}
+
 func (s *Server) GetDocument(uri protocol.DocumentURI) (string, bool) {
 	if doc, ok := s.documents.Load(uri); ok {
 		if content, ok := doc.(string); ok {
@@ -376,6 +450,17 @@ func (s *Server) GetDocument(uri protocol.DocumentURI) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func (s *Server) WillSaveWaitUntil(ctx context.Context, params *protocol.WillSaveTextDocumentParams) ([]protocol.TextEdit, error) {
+	settings := s.getSettings()
+	if !settings.Features.Formatting {
+		return nil, nil
+	}
+
+	return s.Format(ctx, &protocol.DocumentFormattingParams{
+		TextDocument: params.TextDocument,
+	})
 }
 
 func (s *Server) Format(ctx context.Context, params *protocol.DocumentFormattingParams) ([]protocol.TextEdit, error) {

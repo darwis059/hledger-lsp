@@ -437,6 +437,33 @@ func addString(values []string, target string) []string {
 	return append(values, target)
 }
 
+func (w *Workspace) GetIncludedBy(path string) []string {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	visited := make(map[string]bool)
+	var result []string
+
+	queue := []string{path}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		if visited[current] {
+			continue
+		}
+		visited[current] = true
+
+		for _, parent := range w.reverseGraph[current] {
+			if !visited[parent] {
+				result = append(result, parent)
+				queue = append(queue, parent)
+			}
+		}
+	}
+
+	return result
+}
+
 func (w *Workspace) GetCommodityFormats() map[string]formatter.NumberFormat {
 	w.mu.RLock()
 	if w.cachedFormats != nil {

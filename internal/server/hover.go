@@ -301,6 +301,17 @@ func countPostingsForAccountInTransactions(accountName string, transactions []as
 	return count
 }
 
+func ensureRangeEnd(rng ast.Range, name string) ast.Range {
+	if rng.End.Line == 0 && rng.End.Column == 0 && rng.Start.Line > 0 {
+		rng.End = ast.Position{
+			Line:   rng.Start.Line,
+			Column: rng.Start.Column + lsputil.UTF16Len(name),
+			Offset: rng.Start.Offset + len(name),
+		}
+	}
+	return rng
+}
+
 func astRangeToProtocol(rng ast.Range) *protocol.Range {
 	return &protocol.Range{
 		Start: protocol.Position{
