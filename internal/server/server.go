@@ -107,6 +107,10 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 	}
 	if settings.Features.Formatting {
 		caps.DocumentFormattingProvider = true
+		caps.DocumentRangeFormattingProvider = true
+		caps.DocumentOnTypeFormattingProvider = &protocol.DocumentOnTypeFormattingOptions{
+			FirstTriggerCharacter: "\n",
+		}
 	}
 	if settings.Features.SemanticTokens {
 		caps.SemanticTokensProvider = GetSemanticTokensCapabilities()

@@ -196,7 +196,7 @@ func (d *serverDispatcher) Implementation(ctx context.Context, params *protocol.
 }
 
 func (d *serverDispatcher) OnTypeFormatting(ctx context.Context, params *protocol.DocumentOnTypeFormattingParams) ([]protocol.TextEdit, error) {
-	return nil, nil
+	return d.srv.OnTypeFormatting(ctx, params)
 }
 
 func (d *serverDispatcher) PrepareRename(ctx context.Context, params *protocol.PrepareRenameParams) (*protocol.Range, error) {
@@ -204,7 +204,7 @@ func (d *serverDispatcher) PrepareRename(ctx context.Context, params *protocol.P
 }
 
 func (d *serverDispatcher) RangeFormatting(ctx context.Context, params *protocol.DocumentRangeFormattingParams) ([]protocol.TextEdit, error) {
-	return nil, nil
+	return d.srv.RangeFormat(ctx, params)
 }
 
 func (d *serverDispatcher) References(ctx context.Context, params *protocol.ReferenceParams) ([]protocol.Location, error) {

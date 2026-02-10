@@ -150,6 +150,9 @@ func TestServer_Initialize(t *testing.T) {
 	assert.Equal(t, []string{":", "@", "="}, caps.CompletionProvider.TriggerCharacters)
 	assert.True(t, caps.HoverProvider.(bool))
 	assert.True(t, caps.DocumentFormattingProvider.(bool))
+	assert.True(t, caps.DocumentRangeFormattingProvider.(bool))
+	assert.NotNil(t, caps.DocumentOnTypeFormattingProvider)
+	assert.Equal(t, "\n", caps.DocumentOnTypeFormattingProvider.FirstTriggerCharacter)
 	assert.True(t, caps.DocumentSymbolProvider.(bool))
 	assert.NotNil(t, caps.SemanticTokensProvider)
 	assert.NotNil(t, caps.CodeActionProvider)
@@ -1057,6 +1060,8 @@ func TestServer_Initialize_FeatureToggles(t *testing.T) {
 			},
 			checkCaps: func(t *testing.T, caps protocol.ServerCapabilities) {
 				assert.Nil(t, caps.DocumentFormattingProvider)
+				assert.Nil(t, caps.DocumentRangeFormattingProvider)
+				assert.Nil(t, caps.DocumentOnTypeFormattingProvider)
 			},
 		},
 		{

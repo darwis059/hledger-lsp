@@ -13,7 +13,7 @@ hledger-lsp — LSP-сервер для journal-файлов hledger на Go. О
 
 - Completion: счета, плательщики, валюты.
 - Diagnostics: баланс, синтаксис, базовые проверки.
-- Formatting: выравнивание сумм и отступы.
+- Formatting: выравнивание сумм и отступы (full, range, onType).
 - Hover: балансы и детали транзакций.
 - Semantic tokens: подсветка синтаксиса.
 - Document symbols: транзакции, директивы, include.
