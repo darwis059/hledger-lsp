@@ -531,3 +531,111 @@ func TestCollectPayeeTemplates_DeterministicWithMultiplePatterns(t *testing.T) {
 		"Should deterministically select pattern from last transaction when counts are equal")
 	assert.Equal(t, "assets:wallet", firstResult[1].Account)
 }
+
+func TestCollectDescriptions(t *testing.T) {
+	input := `2024-01-15 Grocery Store | weekly shopping
+    expenses:food  $50
+    assets:cash
+
+2024-01-16 Coffee Shop
+    expenses:food  $5
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	descriptions := CollectDescriptions(journal)
+
+	assert.Contains(t, descriptions, "Grocery Store | weekly shopping")
+	assert.Contains(t, descriptions, "Coffee Shop")
+}
+
+func TestCollectDescriptions_NoDuplicates(t *testing.T) {
+	input := `2024-01-15 Grocery Store | weekly shopping
+    expenses:food  $50
+    assets:cash
+
+2024-01-16 Grocery Store | weekly shopping
+    expenses:food  $30
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	descriptions := CollectDescriptions(journal)
+
+	count := 0
+	for _, d := range descriptions {
+		if d == "Grocery Store | weekly shopping" {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count)
+}
+
+func TestCollectDescriptions_UsesFullDescription(t *testing.T) {
+	input := `2024-01-15 grocery store
+    expenses:food  $50
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	descriptions := CollectDescriptions(journal)
+
+	assert.Contains(t, descriptions, "grocery store")
+}
+
+func TestCollectDescriptions_VsPayees_WithoutPipe(t *testing.T) {
+	input := `2024-01-15 grocery store
+    expenses:food  $50
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	descriptions := CollectDescriptions(journal)
+	payees := CollectPayees(journal)
+
+	assert.Equal(t, descriptions, payees,
+		"without pipe separator, Descriptions and Payees should be identical")
+}
+
+func TestCollectDescriptions_VsPayees_WithPipe(t *testing.T) {
+	input := `2024-01-15 Grocery Store | weekly shopping
+    expenses:food  $50
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	descriptions := CollectDescriptions(journal)
+	payees := CollectPayees(journal)
+
+	assert.Contains(t, descriptions, "Grocery Store | weekly shopping")
+	assert.Contains(t, payees, "Grocery Store")
+	assert.NotEqual(t, descriptions, payees,
+		"with pipe separator, Descriptions and Payees should differ")
+}
+
+func TestCollectDescriptionCounts(t *testing.T) {
+	input := `2024-01-15 Grocery Store | weekly shopping
+    expenses:food  $50
+    assets:cash
+
+2024-01-16 Grocery Store | weekly shopping
+    expenses:food  $30
+    assets:cash
+
+2024-01-17 Coffee Shop
+    expenses:food  $5
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	counts := CollectDescriptionCounts(journal)
+
+	assert.Equal(t, 2, counts["Grocery Store | weekly shopping"])
+	assert.Equal(t, 1, counts["Coffee Shop"])
+}

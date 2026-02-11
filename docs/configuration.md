@@ -27,6 +27,7 @@ Enable or disable specific LSP features.
 | `hledger.completion.maxResults` | `50` | Maximum number of completion items |
 | `hledger.completion.fuzzyMatching` | `true` | Enable fuzzy matching |
 | `hledger.completion.showCounts` | `true` | Show usage counts in completion details |
+| `hledger.completion.includeNotes` | `true` | Include notes in payee completions |
 
 ## Diagnostics
 
@@ -75,6 +76,7 @@ Enable or disable specific LSP features.
   "hledger.features.codeLens": false,
   "hledger.completion.maxResults": 100,
   "hledger.completion.fuzzyMatching": true,
+  "hledger.completion.includeNotes": true,
   "hledger.diagnostics.undeclaredAccounts": true,
   "hledger.diagnostics.unbalancedTransactions": true,
   "hledger.formatting.indentSize": 4,
@@ -110,6 +112,7 @@ lspconfig.hledger_lsp.setup({
         maxResults = 100,
         fuzzyMatching = true,
         showCounts = true,
+        includeNotes = true,
       },
       diagnostics = {
         undeclaredAccounts = true,
@@ -144,7 +147,7 @@ lspconfig.hledger_lsp.setup({
                 :semanticTokens t :codeActions t :foldingRanges t
                 :documentLinks t :workspaceSymbol t :inlineCompletion t
                 :codeLens nil)
-     :completion (:maxResults 100 :fuzzyMatching t :showCounts t)
+     :completion (:maxResults 100 :fuzzyMatching t :showCounts t :includeNotes t)
      :diagnostics (:undeclaredAccounts t :undeclaredCommodities t
                    :unbalancedTransactions t)
      :formatting (:indentSize 4 :alignAmounts t :minAlignmentColumn 40)

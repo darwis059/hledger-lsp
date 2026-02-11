@@ -49,7 +49,7 @@ func (s *Server) Completion(ctx context.Context, params *protocol.CompletionPara
 
 	settings := s.getSettings()
 	completionCtx := determineCompletionContext(doc, params.Position, params.Context)
-	counts := getCountsForContext(completionCtx, result)
+	counts := getCountsForContext(completionCtx, result, settings.Completion)
 	items := s.generateCompletionItems(completionCtx, result, doc, params.Position, counts, settings.Completion)
 	attachResolveData(items, completionCtx, params.TextDocument.URI)
 
@@ -81,11 +81,14 @@ func (s *Server) Completion(ctx context.Context, params *protocol.CompletionPara
 	}, nil
 }
 
-func getCountsForContext(ctxType CompletionContextType, result *analyzer.AnalysisResult) map[string]int {
+func getCountsForContext(ctxType CompletionContextType, result *analyzer.AnalysisResult, settings completionSettings) map[string]int {
 	switch ctxType {
 	case ContextAccount:
 		return result.AccountCounts
 	case ContextPayee:
+		if settings.IncludeNotes {
+			return result.DescriptionCounts
+		}
 		return result.PayeeCounts
 	case ContextCommodity:
 		return result.CommodityCounts
@@ -342,7 +345,11 @@ func (s *Server) generateCompletionItems(ctxType CompletionContextType, result *
 		}
 
 	case ContextPayee:
-		for _, payee := range result.Payees {
+		payees := result.Payees
+		if settings.IncludeNotes {
+			payees = result.Descriptions
+		}
+		for _, payee := range payees {
 			items = append(items, protocol.CompletionItem{
 				Label:  payee,
 				Kind:   protocol.CompletionItemKindClass,

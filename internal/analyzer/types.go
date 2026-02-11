@@ -25,6 +25,7 @@ type Diagnostic struct {
 type AnalysisResult struct {
 	Accounts       *AccountIndex
 	Payees         []string
+	Descriptions   []string
 	Commodities    []string
 	Tags           []string
 	TagValues      map[string][]string
@@ -32,10 +33,11 @@ type AnalysisResult struct {
 	PayeeTemplates map[string][]PostingTemplate
 	Diagnostics    []Diagnostic
 
-	AccountCounts   map[string]int
-	PayeeCounts     map[string]int
-	CommodityCounts map[string]int
-	TagCounts       map[string]int
+	AccountCounts     map[string]int
+	PayeeCounts       map[string]int
+	DescriptionCounts map[string]int
+	CommodityCounts   map[string]int
+	TagCounts         map[string]int
 
 	PayeeAccounts         map[string][]string
 	PayeeAccountPairUsage map[string]int

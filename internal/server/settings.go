@@ -29,6 +29,7 @@ type completionSettings struct {
 	MaxResults    int
 	FuzzyMatching bool
 	ShowCounts    bool
+	IncludeNotes  bool
 }
 
 type diagnosticsSettings struct {
@@ -77,6 +78,7 @@ func defaultServerSettings() serverSettings {
 			MaxResults:    50,
 			FuzzyMatching: true,
 			ShowCounts:    true,
+			IncludeNotes:  true,
 		},
 		Diagnostics: diagnosticsSettings{
 			UndeclaredAccounts:     true,
@@ -260,6 +262,9 @@ func applySettingsMap(settings serverSettings, raw map[string]interface{}) serve
 		if value, ok := toBool(completionRaw["showCounts"]); ok {
 			settings.Completion.ShowCounts = value
 		}
+		if value, ok := toBool(completionRaw["includeNotes"]); ok {
+			settings.Completion.IncludeNotes = value
+		}
 	}
 	if value, ok := toInt(raw["completion.maxResults"]); ok {
 		settings.Completion.MaxResults = value
@@ -269,6 +274,9 @@ func applySettingsMap(settings serverSettings, raw map[string]interface{}) serve
 	}
 	if value, ok := toBool(raw["completion.showCounts"]); ok {
 		settings.Completion.ShowCounts = value
+	}
+	if value, ok := toBool(raw["completion.includeNotes"]); ok {
+		settings.Completion.IncludeNotes = value
 	}
 
 	// Diagnostics

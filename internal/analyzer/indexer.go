@@ -45,6 +45,22 @@ func addAccountToIndex(idx *AccountIndex, name string) {
 	}
 }
 
+func CollectDescriptions(journal *ast.Journal) []string {
+	seen := make(map[string]bool)
+	var descriptions []string
+
+	for _, tx := range journal.Transactions {
+		name := tx.Description
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		descriptions = append(descriptions, name)
+	}
+
+	return descriptions
+}
+
 func CollectPayees(journal *ast.Journal) []string {
 	seen := make(map[string]bool)
 	var payees []string
@@ -293,6 +309,16 @@ func CollectAccountCounts(journal *ast.Journal) map[string]int {
 			if posting.Account.GetResolvedName() != "" {
 				counts[posting.Account.GetResolvedName()]++
 			}
+		}
+	}
+	return counts
+}
+
+func CollectDescriptionCounts(journal *ast.Journal) map[string]int {
+	counts := make(map[string]int)
+	for _, tx := range journal.Transactions {
+		if tx.Description != "" {
+			counts[tx.Description]++
 		}
 	}
 	return counts

@@ -2741,3 +2741,100 @@ func TestDetectDateFormat_FromCursorPosition(t *testing.T) {
 		})
 	}
 }
+
+func TestCompletion_IncludeNotes_True_ShowsFullDescription(t *testing.T) {
+	srv := NewServer()
+	settings := srv.getSettings()
+	settings.Completion.IncludeNotes = true
+	srv.setSettings(settings)
+
+	content := `2024-01-15 Grocery Store | weekly shopping
+    expenses:food  $50
+    assets:cash
+
+2024-01-16 `
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 11},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "Grocery Store | weekly shopping",
+		"with IncludeNotes=true, payee completions should include full description")
+	assert.NotContains(t, labels, "Grocery Store",
+		"with IncludeNotes=true, payee-only should not appear as separate item")
+}
+
+func TestCompletion_IncludeNotes_False_ShowsPayeeOnly(t *testing.T) {
+	srv := NewServer()
+	settings := srv.getSettings()
+	settings.Completion.IncludeNotes = false
+	srv.setSettings(settings)
+
+	content := `2024-01-15 Grocery Store | weekly shopping
+    expenses:food  $50
+    assets:cash
+
+2024-01-16 `
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 11},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "Grocery Store",
+		"with IncludeNotes=false, payee completions should show payee only")
+	assert.NotContains(t, labels, "Grocery Store | weekly shopping",
+		"with IncludeNotes=false, full description should not appear")
+}
+
+func TestCompletion_IncludeNotes_DefaultTrue(t *testing.T) {
+	srv := NewServer()
+
+	content := `2024-01-15 Grocery Store | weekly shopping
+    expenses:food  $50
+    assets:cash
+
+2024-01-16 `
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 11},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "Grocery Store | weekly shopping",
+		"default behavior should include notes (IncludeNotes defaults to true)")
+}

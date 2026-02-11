@@ -26,6 +26,7 @@ func (a *Analyzer) analyzeInternal(journal *ast.Journal, external ExternalDeclar
 	result := &AnalysisResult{
 		Accounts:              CollectAccounts(journal),
 		Payees:                CollectPayees(journal),
+		Descriptions:          CollectDescriptions(journal),
 		Commodities:           CollectCommodities(journal),
 		Tags:                  CollectTags(journal),
 		TagValues:             CollectTagValues(journal),
@@ -34,6 +35,7 @@ func (a *Analyzer) analyzeInternal(journal *ast.Journal, external ExternalDeclar
 		Diagnostics:           make([]Diagnostic, 0),
 		AccountCounts:         CollectAccountCounts(journal),
 		PayeeCounts:           CollectPayeeCounts(journal),
+		DescriptionCounts:     CollectDescriptionCounts(journal),
 		CommodityCounts:       CollectCommodityCounts(journal),
 		TagCounts:             CollectTagCounts(journal),
 		PayeeAccounts:         CollectPayeeAccounts(journal),
@@ -80,6 +82,7 @@ func (a *Analyzer) AnalyzeResolved(resolved *include.ResolvedJournal) *AnalysisR
 	result := &AnalysisResult{
 		Accounts:              NewAccountIndex(),
 		Payees:                []string{},
+		Descriptions:          []string{},
 		Commodities:           []string{},
 		Tags:                  []string{},
 		TagValues:             make(map[string][]string),
@@ -88,6 +91,7 @@ func (a *Analyzer) AnalyzeResolved(resolved *include.ResolvedJournal) *AnalysisR
 		Diagnostics:           make([]Diagnostic, 0),
 		AccountCounts:         make(map[string]int),
 		PayeeCounts:           make(map[string]int),
+		DescriptionCounts:     make(map[string]int),
 		CommodityCounts:       make(map[string]int),
 		TagCounts:             make(map[string]int),
 		PayeeAccounts:         make(map[string][]string),
@@ -100,6 +104,7 @@ func (a *Analyzer) AnalyzeResolved(resolved *include.ResolvedJournal) *AnalysisR
 
 	result.Accounts = collectAccountsFromResolved(resolved)
 	result.Payees = collectPayeesFromResolved(resolved)
+	result.Descriptions = collectDescriptionsFromResolved(resolved)
 	result.Commodities = collectCommoditiesFromResolved(resolved)
 	result.Tags = collectTagsFromResolved(resolved)
 	result.TagValues = collectTagValuesFromResolved(resolved)
@@ -107,6 +112,7 @@ func (a *Analyzer) AnalyzeResolved(resolved *include.ResolvedJournal) *AnalysisR
 	result.PayeeTemplates = collectPayeeTemplatesFromResolved(resolved)
 	result.AccountCounts = collectAccountCountsFromResolved(resolved)
 	result.PayeeCounts = collectPayeeCountsFromResolved(resolved)
+	result.DescriptionCounts = collectDescriptionCountsFromResolved(resolved)
 	result.CommodityCounts = collectCommodityCountsFromResolved(resolved)
 	result.TagCounts = collectTagCountsFromResolved(resolved)
 	result.PayeeAccounts = collectPayeeAccountsFromResolved(resolved)
@@ -189,6 +195,31 @@ func collectPayeesFromResolved(resolved *include.ResolvedJournal) []string {
 	}
 
 	return payees
+}
+
+func collectDescriptionsFromResolved(resolved *include.ResolvedJournal) []string {
+	seen := make(map[string]bool)
+	var descriptions []string
+
+	if resolved.Primary != nil {
+		for _, d := range CollectDescriptions(resolved.Primary) {
+			if !seen[d] {
+				seen[d] = true
+				descriptions = append(descriptions, d)
+			}
+		}
+	}
+
+	for _, journal := range resolved.Files {
+		for _, d := range CollectDescriptions(journal) {
+			if !seen[d] {
+				seen[d] = true
+				descriptions = append(descriptions, d)
+			}
+		}
+	}
+
+	return descriptions
 }
 
 func collectCommoditiesFromResolved(resolved *include.ResolvedJournal) []string {
@@ -343,6 +374,23 @@ func collectPayeeCountsFromResolved(resolved *include.ResolvedJournal) map[strin
 			return
 		}
 		for k, v := range CollectPayeeCounts(journal) {
+			counts[k] += v
+		}
+	}
+	mergeCounts(resolved.Primary)
+	for _, journal := range resolved.Files {
+		mergeCounts(journal)
+	}
+	return counts
+}
+
+func collectDescriptionCountsFromResolved(resolved *include.ResolvedJournal) map[string]int {
+	counts := make(map[string]int)
+	mergeCounts := func(journal *ast.Journal) {
+		if journal == nil {
+			return
+		}
+		for k, v := range CollectDescriptionCounts(journal) {
 			counts[k] += v
 		}
 	}

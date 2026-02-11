@@ -52,6 +52,9 @@ func TestDefaultServerSettings(t *testing.T) {
 	if !s.Completion.ShowCounts {
 		t.Error("Completion.ShowCounts should default to true")
 	}
+	if !s.Completion.IncludeNotes {
+		t.Error("Completion.IncludeNotes should default to true")
+	}
 
 	// Diagnostics settings
 	if !s.Diagnostics.UndeclaredAccounts {
@@ -132,6 +135,7 @@ func TestParseSettingsFromRaw_Completion(t *testing.T) {
 			"maxResults":    100,
 			"fuzzyMatching": false,
 			"showCounts":    false,
+			"includeNotes":  false,
 		},
 	}
 
@@ -145,6 +149,9 @@ func TestParseSettingsFromRaw_Completion(t *testing.T) {
 	}
 	if result.Completion.ShowCounts {
 		t.Error("Completion.ShowCounts should be false")
+	}
+	if result.Completion.IncludeNotes {
+		t.Error("Completion.IncludeNotes should be false")
 	}
 }
 
