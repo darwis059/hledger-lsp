@@ -169,7 +169,7 @@ func (s *Server) Initialized(_ context.Context, _ *protocol.InitializedParams) e
 		}
 	}
 	go s.refreshConfiguration(context.Background())
-	s.registerFileWatchers()
+	go s.registerFileWatchers()
 	return nil
 }
 
