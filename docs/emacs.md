@@ -111,6 +111,36 @@ With eglot, standard keybindings work:
 | `C-c C-r` | Rename symbol |
 | `C-c C-f` | Format buffer |
 
+## Format on Type
+
+hledger-lsp registers Enter and Tab as trigger characters for `textDocument/onTypeFormatting`:
+
+- **Enter**: auto-indents new posting lines after transaction headers or existing postings
+- **Tab**: aligns cursor to the amount column after an account name
+
+### Using eglot
+
+Eglot supports `onTypeFormatting`. Enter should work automatically. Tab may conflict with `electric-indent-mode` or completion frameworks. If so, add a custom binding:
+
+```elisp
+(defun hledger-align-amount ()
+  "Send Tab to LSP for amount alignment."
+  (interactive)
+  (eglot-format nil nil "\t"))
+
+(define-key hledger-mode-map (kbd "TAB") #'hledger-align-amount)
+```
+
+### Using lsp-mode
+
+lsp-mode supports `onTypeFormatting` via `lsp-enable-on-type-formatting`. Ensure it is enabled:
+
+```elisp
+(setq lsp-enable-on-type-formatting t)
+```
+
+Tab may conflict with `company-mode` or `electric-indent-mode`. A custom keybinding may be needed if Tab does not trigger alignment.
+
 ## Verify
 
 1. Open a `.journal` file

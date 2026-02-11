@@ -140,7 +140,7 @@ Without a registered language ID, colors apply globally:
 
 ## Enable Format on Type
 
-To enable auto-indentation after Enter and Tab alignment for amounts:
+To enable auto-indentation after Enter:
 
 ```json
 {
@@ -152,9 +152,13 @@ Features enabled:
 
 - **Enter after transaction header**: auto-indents new posting line
 - **Enter after posting**: auto-indents next posting line
-- **Tab after account name**: aligns cursor to amount column
 
-Note: Tab alignment works only outside snippet mode. When editing a template snippet, Tab navigates between tabstops.
+### Tab Alignment
+
+Tab alignment for amounts works differently depending on setup:
+
+- **hledger-vscode extension**: Tab alignment works automatically via a built-in keybinding. Press Tab after an account name to align the cursor to the amount column. The keybinding is active when no autocomplete popup, inline suggestion, or snippet is active.
+- **vscode-lspconfig**: Tab alignment is not available. VS Code does not deliver Tab keypresses to the LSP `onTypeFormatting` pipeline ([VS Code #89826](https://github.com/microsoft/vscode/issues/89826)), and vscode-lspconfig does not provide a workaround keybinding.
 
 ## Debugging Semantic Tokens
 
@@ -185,9 +189,15 @@ If no semantic token type appears, the LSP server may not be running or semantic
 - Ensure the file has `.journal` or `.hledger` extension
 - Check that the LSP client is configured for these extensions
 
-**Enter/Tab formatting not working:**
+**Enter auto-indent not working:**
 
 - Enable `"editor.formatOnType": true` in VS Code settings
+- Check that the LSP server is running (Output panel → select hledger-lsp)
+
+**Tab alignment not working:**
+
+- Requires hledger-vscode extension (not available with vscode-lspconfig)
+- Check that you are not in snippet mode, autocomplete, or inline suggestion
 - Check that the LSP server is running (Output panel → select hledger-lsp)
 
 **Semantic highlighting not working:**

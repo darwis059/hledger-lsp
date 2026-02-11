@@ -153,6 +153,33 @@ vim.api.nvim_create_autocmd("LspAttach", {
 })
 ```
 
+## Format on Type
+
+hledger-lsp registers Enter and Tab as trigger characters for `textDocument/onTypeFormatting`:
+
+- **Enter**: auto-indents new posting lines after transaction headers or existing postings
+- **Tab**: aligns cursor to the amount column after an account name
+
+### Neovim 0.11+
+
+Neovim 0.11 added `textDocument/onTypeFormatting` support ([PR #34637](https://github.com/neovim/vim/pull/34637)). Tab and Enter triggers should work through the standard LSP pipeline.
+
+If Tab conflicts with `expandtab` or completion plugins, you may need a custom keymap:
+
+```lua
+vim.api.nvim_create_autocmd("LspAttach", {
+  callback = function(args)
+    vim.keymap.set("i", "<Tab>", function()
+      vim.lsp.buf.format({ trigger_character = "\t" })
+    end, { buffer = args.buf })
+  end,
+})
+```
+
+### Neovim < 0.11
+
+`onTypeFormatting` is not supported. Enter auto-indent and Tab alignment are not available.
+
 ## Verify
 
 1. Open a `.journal` file
