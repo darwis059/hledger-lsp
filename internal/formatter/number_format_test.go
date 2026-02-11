@@ -5,6 +5,8 @@ import (
 
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/juev/hledger-lsp/internal/ast"
 )
 
 func TestParseNumberFormat(t *testing.T) {
@@ -92,6 +94,60 @@ func TestParseNumberFormat(t *testing.T) {
 			assert.Equal(t, tt.expected.ThousandsSep, result.ThousandsSep, "ThousandsSep")
 			assert.Equal(t, tt.expected.DecimalPlaces, result.DecimalPlaces, "DecimalPlaces")
 			assert.Equal(t, tt.expected.HasDecimal, result.HasDecimal, "HasDecimal")
+		})
+	}
+}
+
+func TestParseCommodityFormat(t *testing.T) {
+	tests := []struct {
+		name         string
+		format       string
+		symbol       string
+		wantPosition ast.CommodityPosition
+		wantSpace    bool
+	}{
+		{
+			name:         "RUB right with space",
+			format:       "1.000,00 RUB",
+			symbol:       "RUB",
+			wantPosition: ast.CommodityRight,
+			wantSpace:    true,
+		},
+		{
+			name:         "$ left no space",
+			format:       "$1,000.00",
+			symbol:       "$",
+			wantPosition: ast.CommodityLeft,
+			wantSpace:    false,
+		},
+		{
+			name:         "EUR right with space",
+			format:       "1 000,00 EUR",
+			symbol:       "EUR",
+			wantPosition: ast.CommodityRight,
+			wantSpace:    true,
+		},
+		{
+			name:         "symbol left with space",
+			format:       "$ 1,000.00",
+			symbol:       "$",
+			wantPosition: ast.CommodityLeft,
+			wantSpace:    true,
+		},
+		{
+			name:         "no symbol in format defaults to right",
+			format:       "1 000,00",
+			symbol:       "RUB",
+			wantPosition: ast.CommodityRight,
+			wantSpace:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ParseCommodityFormat(tt.format, tt.symbol)
+			assert.Equal(t, tt.wantPosition, result.Position, "Position")
+			assert.Equal(t, tt.wantSpace, result.SpaceBetween, "SpaceBetween")
 		})
 	}
 }

@@ -6,7 +6,54 @@ import (
 	"unicode/utf8"
 
 	"github.com/shopspring/decimal"
+
+	"github.com/juev/hledger-lsp/internal/ast"
 )
+
+type CommodityFormat struct {
+	NumberFormat
+	Position     ast.CommodityPosition
+	SpaceBetween bool
+}
+
+func ParseCommodityFormat(formatStr string, symbol string) CommodityFormat {
+	cf := CommodityFormat{
+		NumberFormat: ParseNumberFormat(formatStr),
+		Position:     ast.CommodityRight,
+		SpaceBetween: true,
+	}
+
+	if symbol == "" {
+		return cf
+	}
+
+	symbolIdx := strings.Index(formatStr, symbol)
+	if symbolIdx < 0 {
+		return cf
+	}
+
+	numberStart := -1
+	for i, r := range formatStr {
+		if unicode.IsDigit(r) {
+			numberStart = i
+			break
+		}
+	}
+	if numberStart < 0 {
+		return cf
+	}
+
+	if symbolIdx < numberStart {
+		cf.Position = ast.CommodityLeft
+		symbolEnd := symbolIdx + len(symbol)
+		cf.SpaceBetween = symbolEnd < len(formatStr) && formatStr[symbolEnd] == ' '
+	} else {
+		cf.Position = ast.CommodityRight
+		cf.SpaceBetween = symbolIdx > 0 && formatStr[symbolIdx-1] == ' '
+	}
+
+	return cf
+}
 
 type NumberFormat struct {
 	DecimalMark   rune

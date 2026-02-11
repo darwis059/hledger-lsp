@@ -35,11 +35,11 @@ func FormatDocument(journal *ast.Journal, content string) []protocol.TextEdit {
 	return FormatDocumentWithFormats(journal, content, commodityFormats)
 }
 
-func FormatDocumentWithFormats(journal *ast.Journal, content string, commodityFormats map[string]NumberFormat) []protocol.TextEdit {
+func FormatDocumentWithFormats(journal *ast.Journal, content string, commodityFormats map[string]CommodityFormat) []protocol.TextEdit {
 	return FormatDocumentWithOptions(journal, content, commodityFormats, DefaultOptions())
 }
 
-func FormatDocumentWithOptions(journal *ast.Journal, content string, commodityFormats map[string]NumberFormat, opts Options) []protocol.TextEdit {
+func FormatDocumentWithOptions(journal *ast.Journal, content string, commodityFormats map[string]CommodityFormat, opts Options) []protocol.TextEdit {
 	if commodityFormats == nil {
 		commodityFormats = extractCommodityFormats(journal)
 	}
@@ -114,22 +114,22 @@ func trimTrailingSpacesEdits(content string, mapper *lsputil.PositionMapper, pos
 	return edits
 }
 
-func extractCommodityFormats(journal *ast.Journal) map[string]NumberFormat {
-	formats := make(map[string]NumberFormat)
-	var defaultFormat *NumberFormat
+func extractCommodityFormats(journal *ast.Journal) map[string]CommodityFormat {
+	formats := make(map[string]CommodityFormat)
+	var defaultFormat *CommodityFormat
 
 	for _, dir := range journal.Directives {
 		switch d := dir.(type) {
 		case ast.CommodityDirective:
 			if d.Format != "" {
-				formats[d.Commodity.Symbol] = ParseNumberFormat(d.Format)
+				formats[d.Commodity.Symbol] = ParseCommodityFormat(d.Format, d.Commodity.Symbol)
 			}
 		case ast.DefaultCommodityDirective:
 			if d.Format != "" {
-				nf := ParseNumberFormat(d.Format)
-				defaultFormat = &nf
+				cf := ParseCommodityFormat(d.Format, d.Symbol)
+				defaultFormat = &cf
 				if d.Symbol != "" {
-					formats[d.Symbol] = nf
+					formats[d.Symbol] = cf
 				}
 			}
 		}
@@ -142,7 +142,7 @@ func extractCommodityFormats(journal *ast.Journal) map[string]NumberFormat {
 	return formats
 }
 
-func formatTransactionWithOpts(tx *ast.Transaction, mapper *lsputil.PositionMapper, commodityFormats map[string]NumberFormat, globalAccountCol int, opts Options) []protocol.TextEdit {
+func formatTransactionWithOpts(tx *ast.Transaction, mapper *lsputil.PositionMapper, commodityFormats map[string]CommodityFormat, globalAccountCol int, opts Options) []protocol.TextEdit {
 	if len(tx.Postings) == 0 {
 		return nil
 	}
@@ -227,14 +227,14 @@ func CalculateGlobalAlignmentColumnWithIndent(transactions []ast.Transaction, in
 // CalculateAlignment calculates alignment for a single transaction's postings.
 // For consistent file-wide alignment, use CalculateAlignmentWithGlobal with
 // a pre-calculated global column from CalculateGlobalAlignmentColumn.
-func CalculateAlignment(postings []ast.Posting, commodityFormats map[string]NumberFormat) AlignmentInfo {
+func CalculateAlignment(postings []ast.Posting, commodityFormats map[string]CommodityFormat) AlignmentInfo {
 	accountCol := CalculateAlignmentColumn(postings)
 	return CalculateAlignmentWithGlobal(postings, commodityFormats, accountCol)
 }
 
 // CalculateAlignmentWithGlobal calculates alignment using a provided account column.
 // Use this with CalculateGlobalAlignmentColumn for file-wide consistent alignment.
-func CalculateAlignmentWithGlobal(postings []ast.Posting, commodityFormats map[string]NumberFormat, accountCol int) AlignmentInfo {
+func CalculateAlignmentWithGlobal(postings []ast.Posting, commodityFormats map[string]CommodityFormat, accountCol int) AlignmentInfo {
 
 	hasBalanceAssertion := false
 	maxAmountCostLen := 0
@@ -259,22 +259,12 @@ func CalculateAlignmentWithGlobal(postings []ast.Posting, commodityFormats map[s
 	}
 }
 
-func calculateAmountCostLen(posting *ast.Posting, commodityFormats map[string]NumberFormat) int {
+func calculateAmountCostLen(posting *ast.Posting, commodityFormats map[string]CommodityFormat) int {
 	if posting.Amount == nil {
 		return 0
 	}
 
-	length := 0
-
-	if posting.Amount.Commodity.Position == ast.CommodityLeft {
-		length += utf8.RuneCountInString(posting.Amount.Commodity.Symbol)
-	}
-
-	length += utf8.RuneCountInString(formatAmountQuantity(posting.Amount, commodityFormats))
-
-	if posting.Amount.Commodity.Position == ast.CommodityRight {
-		length += 1 + utf8.RuneCountInString(posting.Amount.Commodity.Symbol)
-	}
+	length := calculateSingleAmountLen(posting.Amount, commodityFormats)
 
 	if posting.Cost != nil {
 		if posting.Cost.IsTotal {
@@ -282,19 +272,29 @@ func calculateAmountCostLen(posting *ast.Posting, commodityFormats map[string]Nu
 		} else {
 			length += 3 // " @ "
 		}
-		if posting.Cost.Amount.Commodity.Position == ast.CommodityLeft {
-			length += utf8.RuneCountInString(posting.Cost.Amount.Commodity.Symbol)
-		}
-		length += utf8.RuneCountInString(formatAmountQuantity(&posting.Cost.Amount, commodityFormats))
-		if posting.Cost.Amount.Commodity.Position == ast.CommodityRight {
-			length += 1 + utf8.RuneCountInString(posting.Cost.Amount.Commodity.Symbol)
+		length += calculateSingleAmountLen(&posting.Cost.Amount, commodityFormats)
+	}
+
+	return length
+}
+
+func calculateSingleAmountLen(amount *ast.Amount, commodityFormats map[string]CommodityFormat) int {
+	_, spaceBetween := resolveCommodityDisplay(amount, commodityFormats)
+	symbolLen := utf8.RuneCountInString(amount.Commodity.Symbol)
+	qtyLen := utf8.RuneCountInString(formatAmountQuantity(amount, commodityFormats))
+	length := qtyLen
+
+	if symbolLen > 0 {
+		length += symbolLen
+		if spaceBetween {
+			length++
 		}
 	}
 
 	return length
 }
 
-func FormatPostingWithAlignment(posting *ast.Posting, alignment AlignmentInfo, commodityFormats map[string]NumberFormat) string {
+func FormatPostingWithAlignment(posting *ast.Posting, alignment AlignmentInfo, commodityFormats map[string]CommodityFormat) string {
 	return formatPostingWithOpts(posting, alignment, commodityFormats, defaultIndent, true)
 }
 
@@ -302,7 +302,7 @@ func FormatPosting(posting *ast.Posting, alignCol int) string {
 	return FormatPostingWithAlignment(posting, AlignmentInfo{AccountCol: alignCol}, nil)
 }
 
-func formatPostingWithOpts(posting *ast.Posting, alignment AlignmentInfo, commodityFormats map[string]NumberFormat, indent string, alignAmounts bool) string {
+func formatPostingWithOpts(posting *ast.Posting, alignment AlignmentInfo, commodityFormats map[string]CommodityFormat, indent string, alignAmounts bool) string {
 	var sb strings.Builder
 
 	sb.WriteString(indent)
@@ -375,41 +375,58 @@ func formatPostingWithOpts(posting *ast.Posting, alignment AlignmentInfo, commod
 	return sb.String()
 }
 
-func writeAmountWithSign(sb *strings.Builder, amount *ast.Amount, commodityFormats map[string]NumberFormat) {
-	qty := formatAmountQuantity(amount, commodityFormats)
+func resolveCommodityDisplay(amount *ast.Amount, commodityFormats map[string]CommodityFormat) (position ast.CommodityPosition, spaceBetween bool) {
+	position = amount.Commodity.Position
+	spaceBetween = position == ast.CommodityRight
 
-	if amount.Commodity.Position == ast.CommodityLeft {
+	if commodityFormats != nil {
+		if cf, ok := commodityFormats[amount.Commodity.Symbol]; ok {
+			return cf.Position, cf.SpaceBetween
+		}
+	}
+	return position, spaceBetween
+}
+
+func writeAmountWithSign(sb *strings.Builder, amount *ast.Amount, commodityFormats map[string]CommodityFormat) {
+	qty := formatAmountQuantity(amount, commodityFormats)
+	position, spaceBetween := resolveCommodityDisplay(amount, commodityFormats)
+
+	if position == ast.CommodityLeft {
 		if amount.SignBeforeCommodity && len(qty) > 0 && (qty[0] == '-' || qty[0] == '+') {
 			sb.WriteByte(qty[0])
 			sb.WriteString(amount.Commodity.Symbol)
+			if spaceBetween {
+				sb.WriteString(" ")
+			}
 			sb.WriteString(qty[1:])
 		} else {
 			sb.WriteString(amount.Commodity.Symbol)
+			if spaceBetween {
+				sb.WriteString(" ")
+			}
 			sb.WriteString(qty)
 		}
 	} else {
 		sb.WriteString(qty)
 		if amount.Commodity.Symbol != "" {
-			sb.WriteString(" ")
+			if spaceBetween {
+				sb.WriteString(" ")
+			}
 			sb.WriteString(amount.Commodity.Symbol)
 		}
 	}
 }
 
-// formatAmountQuantity returns formatted quantity string.
-// Priority: commodity directive format > default format > original raw format > decimal string.
-func formatAmountQuantity(amount *ast.Amount, commodityFormats map[string]NumberFormat) string {
+func formatAmountQuantity(amount *ast.Amount, commodityFormats map[string]CommodityFormat) string {
 	if amount == nil {
 		return ""
 	}
 	if commodityFormats != nil {
-		// First try specific commodity format
-		if format, ok := commodityFormats[amount.Commodity.Symbol]; ok {
-			return FormatNumber(amount.Quantity, format)
+		if cf, ok := commodityFormats[amount.Commodity.Symbol]; ok {
+			return FormatNumber(amount.Quantity, cf.NumberFormat)
 		}
-		// Then try default format (stored under empty key)
-		if format, ok := commodityFormats[""]; ok {
-			return FormatNumber(amount.Quantity, format)
+		if cf, ok := commodityFormats[""]; ok {
+			return FormatNumber(amount.Quantity, cf.NumberFormat)
 		}
 	}
 	if amount.RawQuantity != "" {

@@ -24,7 +24,7 @@ type Workspace struct {
 	loader            *include.Loader
 	loadErrors        []include.LoadError
 	parseErrors       []string
-	cachedFormats     map[string]formatter.NumberFormat
+	cachedFormats     map[string]formatter.CommodityFormat
 	cachedCommodities map[string]bool
 	cachedAccounts    map[string]bool
 	index             *WorkspaceIndex
@@ -464,7 +464,7 @@ func (w *Workspace) GetIncludedBy(path string) []string {
 	return result
 }
 
-func (w *Workspace) GetCommodityFormats() map[string]formatter.NumberFormat {
+func (w *Workspace) GetCommodityFormats() map[string]formatter.CommodityFormat {
 	w.mu.RLock()
 	if w.cachedFormats != nil {
 		defer w.mu.RUnlock()
@@ -483,21 +483,21 @@ func (w *Workspace) GetCommodityFormats() map[string]formatter.NumberFormat {
 		return nil
 	}
 
-	formats := make(map[string]formatter.NumberFormat)
-	var defaultFormat *formatter.NumberFormat
+	formats := make(map[string]formatter.CommodityFormat)
+	var defaultFormat *formatter.CommodityFormat
 
 	for _, dir := range w.resolved.AllDirectives() {
 		switch d := dir.(type) {
 		case ast.CommodityDirective:
 			if d.Format != "" {
-				formats[d.Commodity.Symbol] = formatter.ParseNumberFormat(d.Format)
+				formats[d.Commodity.Symbol] = formatter.ParseCommodityFormat(d.Format, d.Commodity.Symbol)
 			}
 		case ast.DefaultCommodityDirective:
 			if d.Format != "" {
-				nf := formatter.ParseNumberFormat(d.Format)
-				defaultFormat = &nf
+				cf := formatter.ParseCommodityFormat(d.Format, d.Symbol)
+				defaultFormat = &cf
 				if d.Symbol != "" {
-					formats[d.Symbol] = nf
+					formats[d.Symbol] = cf
 				}
 			}
 		}

@@ -485,7 +485,7 @@ func (s *Server) Format(ctx context.Context, params *protocol.DocumentFormatting
 
 	journal, _ := parser.Parse(doc)
 
-	var commodityFormats map[string]formatter.NumberFormat
+	var commodityFormats map[string]formatter.CommodityFormat
 	if s.workspace != nil {
 		commodityFormats = s.workspace.GetCommodityFormats()
 	}

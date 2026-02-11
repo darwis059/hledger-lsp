@@ -17,7 +17,7 @@ func (s *Server) RangeFormat(ctx context.Context, params *protocol.DocumentRange
 
 	journal, _ := parser.Parse(doc)
 
-	var commodityFormats map[string]formatter.NumberFormat
+	var commodityFormats map[string]formatter.CommodityFormat
 	if s.workspace != nil {
 		commodityFormats = s.workspace.GetCommodityFormats()
 	}

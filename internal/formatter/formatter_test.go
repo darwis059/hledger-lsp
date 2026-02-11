@@ -224,7 +224,7 @@ func TestFormatDocument_WithBalanceAssertionCommodityFormat(t *testing.T) {
 	found := false
 	for _, edit := range edits {
 		if edit.NewText != "" && len(edit.NewText) > 0 {
-			if edit.NewText == "    assets:bank    EUR100,00  = 1 000,00 EUR" {
+			if edit.NewText == "    assets:bank    100,00 EUR  = 1 000,00 EUR" {
 				found = true
 				break
 			}
@@ -968,6 +968,29 @@ end apply account
 	// Formatting should preserve original name without prefix
 	assert.Contains(t, result, "revenue")
 	assert.NotContains(t, result, "business:revenue")
+}
+
+func TestFormatDocument_CommodityPositionFromFormatDirective(t *testing.T) {
+	input := `commodity RUB
+  format 1.000,00 RUB
+
+2024-01-15 test
+    expenses:food  RUB 43
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	edits := FormatDocument(journal, input)
+	require.NotEmpty(t, edits)
+
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "43,00 RUB",
+		"format directive says '1.000,00 RUB' so commodity should be right with space, got: %s", result)
+	assert.NotContains(t, result, "RUB43",
+		"should not have commodity glued to number without space")
 }
 
 func TestFormatDocument_PrefixCommodityAfterBareNumber(t *testing.T) {
