@@ -65,13 +65,14 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 	if params != nil {
 		settings := parseSettingsFromRaw(s.getSettings(), params.InitializationOptions)
 		s.setSettings(settings)
-	}
-	if len(params.WorkspaceFolders) > 0 {
-		s.rootURI = strings.TrimPrefix(params.WorkspaceFolders[0].URI, "file://")
-	} else {
-		rootURI := params.RootURI //nolint:staticcheck // keep for backward compatibility
-		if rootURI != "" {
-			s.rootURI = strings.TrimPrefix(string(rootURI), "file://")
+
+		if len(params.WorkspaceFolders) > 0 {
+			s.rootURI = strings.TrimPrefix(params.WorkspaceFolders[0].URI, "file://")
+		} else {
+			rootURI := params.RootURI //nolint:staticcheck
+			if rootURI != "" {
+				s.rootURI = strings.TrimPrefix(string(rootURI), "file://")
+			}
 		}
 	}
 

@@ -161,7 +161,9 @@ func (s *Server) onTypeTab(doc string, params *protocol.DocumentOnTypeFormatting
 
 func (s *Server) getAlignmentColumn(doc string, uri protocol.DocumentURI) int {
 	if cached, ok := s.alignmentCache.Load(uri); ok {
-		return cached.(int)
+		if v, ok := cached.(int); ok {
+			return v
+		}
 	}
 
 	journal, _ := parser.Parse(doc)

@@ -2,7 +2,7 @@ package server
 
 import (
 	"context"
-	"strings"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -228,8 +228,5 @@ func assertContains(t *testing.T, outer, inner protocol.Range) {
 }
 
 func formatRange(r protocol.Range) string {
-	return strings.Join([]string{
-		"[", string(rune('0' + r.Start.Line)), ":", string(rune('0' + r.Start.Character)),
-		"-", string(rune('0' + r.End.Line)), ":", string(rune('0' + r.End.Character)), "]",
-	}, "")
+	return fmt.Sprintf("[%d:%d-%d:%d]", r.Start.Line, r.Start.Character, r.End.Line, r.End.Character)
 }
