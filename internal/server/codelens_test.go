@@ -11,6 +11,10 @@ import (
 
 func TestCodeLens_BalancedTransaction(t *testing.T) {
 	srv := NewServer()
+	settings := srv.getSettings()
+	settings.Features.CodeLens = true
+	srv.setSettings(settings)
+
 	content := `2024-01-15 grocery
     expenses:food  $50
     assets:cash  $-50`
@@ -30,6 +34,10 @@ func TestCodeLens_BalancedTransaction(t *testing.T) {
 
 func TestCodeLens_UnbalancedTransaction(t *testing.T) {
 	srv := NewServer()
+	settings := srv.getSettings()
+	settings.Features.CodeLens = true
+	srv.setSettings(settings)
+
 	content := `2024-01-15 grocery
     expenses:food  $50
     assets:cash  $-40`
@@ -85,6 +93,10 @@ func TestCodeLens_FeatureDisabled(t *testing.T) {
 
 func TestCodeLens_OneLensPerTransaction(t *testing.T) {
 	srv := NewServer()
+	settings := srv.getSettings()
+	settings.Features.CodeLens = true
+	srv.setSettings(settings)
+
 	content := `2024-01-15 grocery
     expenses:food  $50
     assets:cash  $-50

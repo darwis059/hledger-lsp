@@ -71,7 +71,7 @@ func defaultServerSettings() serverSettings {
 			DocumentLinks:    true,
 			WorkspaceSymbol:  true,
 			InlineCompletion: true,
-			CodeLens:         true,
+			CodeLens:         false,
 		},
 		Completion: completionSettings{
 			MaxResults:    50,

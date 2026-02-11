@@ -18,6 +18,7 @@ Enable or disable specific LSP features.
 | `hledger.features.documentLinks` | `true` | Clickable links for include directives |
 | `hledger.features.workspaceSymbol` | `true` | Workspace symbol search |
 | `hledger.features.inlineCompletion` | `true` | Ghost text completions for transaction templates |
+| `hledger.features.codeLens` | `false` | Balance check indicators on transactions |
 
 ## Completion
 
@@ -41,7 +42,7 @@ Enable or disable specific LSP features.
 |---------|---------|-------------|
 | `hledger.formatting.indentSize` | `4` | Number of spaces for posting indent |
 | `hledger.formatting.alignAmounts` | `true` | Align amounts across postings |
-| `hledger.formatting.minAlignmentColumn` | `0` | Minimum column for amount alignment (0 = no minimum) |
+| `hledger.formatting.minAlignmentColumn` | `40` | Minimum column for amount alignment (0 = auto from file) |
 
 ## CLI
 
@@ -71,13 +72,14 @@ Enable or disable specific LSP features.
   "hledger.features.documentLinks": true,
   "hledger.features.workspaceSymbol": true,
   "hledger.features.inlineCompletion": true,
+  "hledger.features.codeLens": false,
   "hledger.completion.maxResults": 100,
   "hledger.completion.fuzzyMatching": true,
   "hledger.diagnostics.undeclaredAccounts": true,
   "hledger.diagnostics.unbalancedTransactions": true,
   "hledger.formatting.indentSize": 4,
   "hledger.formatting.alignAmounts": true,
-  "hledger.formatting.minAlignmentColumn": 0,
+  "hledger.formatting.minAlignmentColumn": 40,
   "hledger.cli.path": "hledger",
   "hledger.cli.timeout": 30000,
   "hledger.limits.maxFileSizeBytes": 20971520,
@@ -102,6 +104,7 @@ lspconfig.hledger_lsp.setup({
         documentLinks = true,
         workspaceSymbol = true,
         inlineCompletion = true,
+        codeLens = false,
       },
       completion = {
         maxResults = 100,
@@ -116,7 +119,7 @@ lspconfig.hledger_lsp.setup({
       formatting = {
         indentSize = 4,
         alignAmounts = true,
-        minAlignmentColumn = 0,
+        minAlignmentColumn = 40,
       },
       cli = {
         enabled = true,
@@ -139,11 +142,12 @@ lspconfig.hledger_lsp.setup({
   '(:hledger
     (:features (:hover t :completion t :formatting t :diagnostics t
                 :semanticTokens t :codeActions t :foldingRanges t
-                :documentLinks t :workspaceSymbol t :inlineCompletion t)
+                :documentLinks t :workspaceSymbol t :inlineCompletion t
+                :codeLens nil)
      :completion (:maxResults 100 :fuzzyMatching t :showCounts t)
      :diagnostics (:undeclaredAccounts t :undeclaredCommodities t
                    :unbalancedTransactions t)
-     :formatting (:indentSize 4 :alignAmounts t :minAlignmentColumn 0)
+     :formatting (:indentSize 4 :alignAmounts t :minAlignmentColumn 40)
      :cli (:enabled t :path "hledger" :timeout 30000)
      :limits (:maxFileSizeBytes 20971520 :maxIncludeDepth 100))))
 ```

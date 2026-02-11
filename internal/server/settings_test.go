@@ -40,6 +40,10 @@ func TestDefaultServerSettings(t *testing.T) {
 	if !s.Features.InlineCompletion {
 		t.Error("Features.InlineCompletion should default to true")
 	}
+	// CodeLens should default to false
+	if s.Features.CodeLens {
+		t.Error("Features.CodeLens should default to false")
+	}
 
 	// Completion settings
 	if !s.Completion.FuzzyMatching {
