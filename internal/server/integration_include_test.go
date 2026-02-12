@@ -122,7 +122,10 @@ func TestIntegration_IncludeCycleDetection(t *testing.T) {
 
 2024-01-15 test
     expenses:food  $50.00
-    assets:cash`
+    assets:cash
+
+2024-01-17 new
+    `
 
 	file2Content := `include file1.journal
 
@@ -144,7 +147,7 @@ func TestIntegration_IncludeCycleDetection(t *testing.T) {
 	_, err = ts.openAndWait(uri, file1Content)
 	require.NoError(t, err)
 
-	completions, err := ts.completion(uri, 4, 4)
+	completions, err := ts.completion(uri, 7, 4)
 	require.NoError(t, err)
 	require.NotNil(t, completions)
 

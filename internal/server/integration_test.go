@@ -205,13 +205,16 @@ invalid line here
 
 2024-01-17 another valid
     expenses:rent  $100.00
-    assets:bank`
+    assets:bank
+
+2024-01-18 new
+    `
 
 	diagnostics, err := ts.openAndWait(uri, content)
 	require.NoError(t, err)
 	require.NotEmpty(t, diagnostics, "should have parse error")
 
-	completions, err := ts.completion(uri, 8, 4)
+	completions, err := ts.completion(uri, 11, 4)
 	require.NoError(t, err)
 	require.NotNil(t, completions)
 

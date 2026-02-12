@@ -39,12 +39,16 @@ func (s *Server) Completion(ctx context.Context, params *protocol.CompletionPara
 	}
 
 	var result *analyzer.AnalysisResult
+	cursorLine := int(params.Position.Line)
 
 	if resolved := s.getWorkspaceResolved(params.TextDocument.URI); resolved != nil {
-		result = s.analyzer.AnalyzeResolved(resolved)
+		filtered := resolvedWithoutTransaction(resolved, cursorLine, params.TextDocument.URI)
+		result = s.analyzer.AnalyzeResolved(filtered)
 	} else {
 		journal, _ := parser.Parse(doc)
-		result = s.analyzer.Analyze(journal)
+		txIdx := findCurrentTransactionIndex(journal.Transactions, cursorLine)
+		filtered := journalWithoutTransaction(journal, txIdx)
+		result = s.analyzer.Analyze(filtered)
 	}
 
 	settings := s.getSettings()

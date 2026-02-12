@@ -138,7 +138,11 @@ func TestCompletion_PayeesShowUsageCount(t *testing.T) {
 
 func TestCompletion_AccountsByPrefix(t *testing.T) {
 	srv := NewServer()
-	content := `2024-01-15 test
+	content := `account expenses:food:groceries
+account expenses:food:restaurant
+account assets:cash
+
+2024-01-15 test
     expenses:food:groceries  $30
     expenses:food:restaurant  $20
     assets:cash`
@@ -150,7 +154,7 @@ func TestCompletion_AccountsByPrefix(t *testing.T) {
 			TextDocument: protocol.TextDocumentIdentifier{
 				URI: "file:///test.journal",
 			},
-			Position: protocol.Position{Line: 1, Character: 14},
+			Position: protocol.Position{Line: 5, Character: 14},
 		},
 		Context: &protocol.CompletionContext{
 			TriggerKind:      protocol.CompletionTriggerKindTriggerCharacter,
@@ -201,7 +205,12 @@ func TestCompletion_Payees(t *testing.T) {
 
 func TestCompletion_Commodities(t *testing.T) {
 	srv := NewServer()
-	content := `2024-01-15 test
+	content := `2024-01-14 prev
+    expenses:food  $40
+    expenses:rent  EUR 80
+    assets:cash
+
+2024-01-15 test
     expenses:food  $50
     expenses:rent  EUR 100
     assets:cash`
@@ -213,7 +222,7 @@ func TestCompletion_Commodities(t *testing.T) {
 			TextDocument: protocol.TextDocumentIdentifier{
 				URI: "file:///test.journal",
 			},
-			Position: protocol.Position{Line: 1, Character: 20},
+			Position: protocol.Position{Line: 6, Character: 20},
 		},
 		Context: &protocol.CompletionContext{
 			TriggerKind:      protocol.CompletionTriggerKindTriggerCharacter,
@@ -2837,4 +2846,127 @@ func TestCompletion_IncludeNotes_DefaultTrue(t *testing.T) {
 	labels := extractLabels(result.Items)
 	assert.Contains(t, labels, "Grocery Store | weekly shopping",
 		"default behavior should include notes (IncludeNotes defaults to true)")
+}
+
+func TestCompletion_ExcludesCurrentTransactionAccounts(t *testing.T) {
+	srv := NewServer()
+	content := `2024-01-15 groceries
+    expenses:food  $50
+    assets:cash
+
+2024-01-16 new
+    `
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 5, Character: 4},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "expenses:food", "accounts from prior transactions remain")
+	assert.Contains(t, labels, "assets:cash", "accounts from prior transactions remain")
+}
+
+func TestCompletion_ExcludesCurrentTransactionPayee(t *testing.T) {
+	srv := NewServer()
+	content := `2024-01-15 Grocery Store
+    expenses:food  $50
+    assets:cash
+
+2024-01-16 Groc`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 15},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "Grocery Store", "payee from prior transaction remains")
+	assert.NotContains(t, labels, "Groc", "partial payee from current transaction excluded")
+}
+
+func TestCompletion_CursorBetweenTransactions(t *testing.T) {
+	srv := NewServer()
+	content := `2024-01-15 Grocery Store
+    expenses:food  $50
+    assets:cash
+
+2024-01-16 Coffee Shop
+    expenses:drinks  $5
+    assets:cash
+`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 7, Character: 0},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	var hasToday bool
+	for _, item := range result.Items {
+		if item.Detail == "today" {
+			hasToday = true
+			break
+		}
+	}
+	assert.True(t, hasToday, "date completions appear between transactions")
+	_ = labels
+}
+
+func TestCompletion_DirectivesSurviveExclusion(t *testing.T) {
+	srv := NewServer()
+	content := `account expenses:food
+account assets:cash
+
+2024-01-15 test
+    `
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 4},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "expenses:food", "account from directive survives when only transaction excluded")
+	assert.Contains(t, labels, "assets:cash", "account from directive survives when only transaction excluded")
 }
