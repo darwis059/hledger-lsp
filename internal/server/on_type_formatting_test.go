@@ -250,7 +250,7 @@ func TestOnTypeFormatting_Tab_OnPostingLine(t *testing.T) {
 	require.Len(t, edits, 1)
 
 	assert.Equal(t, uint32(1), edits[0].Range.Start.Line)
-	assert.Equal(t, uint32(17), edits[0].Range.Start.Character)
+	assert.Equal(t, uint32(18), edits[0].Range.Start.Character)
 	assert.Equal(t, uint32(18), edits[0].Range.End.Character)
 	assert.True(t, len(edits[0].NewText) > 0)
 	assert.True(t, strings.TrimSpace(edits[0].NewText) == "")
@@ -291,7 +291,7 @@ func TestOnTypeFormatting_Tab_UsesGlobalAlignment(t *testing.T) {
 
 	ts.StoreDocument(uri, content)
 
-	edits1, err := ts.onTypeFormattingTab(uri, 1, 37)
+	edits1, err := ts.onTypeFormattingTab(uri, 1, 36)
 	require.NoError(t, err)
 	require.Len(t, edits1, 1)
 

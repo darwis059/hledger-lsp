@@ -138,21 +138,21 @@ func (s *Server) onTypeTab(doc string, params *protocol.DocumentOnTypeFormatting
 		return nil, nil
 	}
 
+	// onTypeTab inserts spaces to align cursor to the global alignment column.
+	// Note: alignAmount command in VS Code does NOT insert Tab before calling this.
+	// params.Position is the current cursor position WITHOUT Tab in the document.
+	// We insert spaces at current position (empty range = insertion), not replace Tab.
 	cursorChar := int(params.Position.Character)
-	tabPos := cursorChar - 1
-	if tabPos < 0 {
+
+	if cursorChar >= alignCol {
 		return nil, nil
 	}
 
-	if tabPos >= alignCol {
-		return nil, nil
-	}
-
-	spacesNeeded := alignCol - tabPos
+	spacesNeeded := alignCol - cursorChar
 
 	return []protocol.TextEdit{{
 		Range: protocol.Range{
-			Start: protocol.Position{Line: uint32(line), Character: uint32(tabPos)},
+			Start: protocol.Position{Line: uint32(line), Character: uint32(cursorChar)},
 			End:   protocol.Position{Line: uint32(line), Character: uint32(cursorChar)},
 		},
 		NewText: strings.Repeat(" ", spacesNeeded),
