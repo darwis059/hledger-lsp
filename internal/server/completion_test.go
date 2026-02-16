@@ -1812,6 +1812,46 @@ account expenses:food
 	assert.Equal(t, uint32(7), textEdit.Range.End.Character, "TextEdit should end at cursor position")
 }
 
+func TestCompletion_AccountMidWord_ReplacesFullToken(t *testing.T) {
+	srv := NewServer()
+	content := "account expenses:food:supermarket\naccount expenses:food:electronics\n\n2024-01-15 test\n    expenses:food:supermarket"
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	// Cursor right after "food:" at "expenses:food:|supermarket" — UTF-16 col 18
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 18},
+		},
+		Context: &protocol.CompletionContext{
+			TriggerCharacter: ":",
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	var electronicsItem *protocol.CompletionItem
+	for i := range result.Items {
+		if result.Items[i].Label == "expenses:food:electronics" {
+			electronicsItem = &result.Items[i]
+			break
+		}
+	}
+
+	require.NotNil(t, electronicsItem, "expenses:food:electronics should be in completions")
+	require.NotNil(t, electronicsItem.TextEdit, "TextEdit should be set")
+
+	textEdit := electronicsItem.TextEdit
+	assert.Equal(t, uint32(4), textEdit.Range.Start.Character, "Start: after indent")
+	assert.Equal(t, uint32(29), textEdit.Range.End.Character, "End: covers full existing account token")
+	assert.Equal(t, "expenses:food:electronics", textEdit.NewText)
+}
+
 // === REFACTORING TESTS ===
 
 func TestFindAmountEnd_Parentheses(t *testing.T) {
@@ -2643,6 +2683,48 @@ func TestCalculateTextEditRange_PayeeWithTab(t *testing.T) {
 	}
 }
 
+func TestCalculateTextEditRange_AccountMidWord(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		char      uint32
+		wantStart uint32
+		wantEnd   uint32
+	}{
+		{
+			name:      "cursor mid-word extends end to doublespace",
+			content:   "    expenses:food:grocery  $50",
+			char:      9,
+			wantStart: 4,
+			wantEnd:   25,
+		},
+		{
+			name:      "cursor at end of token (no text after)",
+			content:   "    expenses:food",
+			char:      17,
+			wantStart: 4,
+			wantEnd:   17,
+		},
+		{
+			name:      "cursor mid cyrillic account",
+			content:   "    Расходы:Продукты:Супермаркет",
+			char:      19, // UTF-16 offset inside Расходы:Продукт|ы
+			wantStart: 4,
+			wantEnd:   32, // UTF-16 len of full line (no terminator, extends to EOL)
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pos := protocol.Position{Line: 0, Character: tt.char}
+			r := calculateTextEditRange(tt.content, pos, ContextAccount)
+			require.NotNil(t, r)
+			assert.Equal(t, tt.wantStart, r.Start.Character, "Start")
+			assert.Equal(t, tt.wantEnd, r.End.Character, "End")
+		})
+	}
+}
+
 func TestDetermineContext_PayeeWithTab(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -2969,4 +3051,49 @@ account assets:cash
 	labels := extractLabels(result.Items)
 	assert.Contains(t, labels, "expenses:food", "account from directive survives when only transaction excluded")
 	assert.Contains(t, labels, "assets:cash", "account from directive survives when only transaction excluded")
+}
+
+func TestFindTokenEnd(t *testing.T) {
+	tests := []struct {
+		name     string
+		line     string
+		byteCol  int
+		ctxType  CompletionContextType
+		expected int
+	}{
+		// ContextAccount: terminates on double-space, tab, semicolon, EOL
+		{"account cursor at end", "    expenses:food", 17, ContextAccount, 17},
+		{"account mid-word ASCII", "    expenses:food:grocery", 17, ContextAccount, 25},
+		{"account before doublespace", "    expenses:food  $50", 17, ContextAccount, 17},
+		{"account before tab", "    expenses:food\t$50", 17, ContextAccount, 17},
+		{"account before semicolon", "    expenses:food  ; comment", 12, ContextAccount, 17},
+		{"account cursor at start", "    expenses:food", 4, ContextAccount, 17},
+		{"account cyrillic mid-word", "    Расходы:Продукты:Супермаркет", 39, ContextAccount, 58},
+		{"account cyrillic with doublespace", "    Расходы:Продукты  100", 4, ContextAccount, 35},
+
+		// ContextPayee: terminates on |, ;, EOL (trim trailing whitespace)
+		{"payee cursor at end", "2024-01-15 grocery store", 24, ContextPayee, 24},
+		{"payee mid-word", "2024-01-15 grocery store", 18, ContextPayee, 24},
+		{"payee before pipe", "2024-01-15 payee | note", 16, ContextPayee, 16},
+		{"payee before semicolon", "2024-01-15 payee ; comment", 16, ContextPayee, 16},
+		{"payee trailing whitespace trimmed", "2024-01-15 grocery   ", 18, ContextPayee, 18},
+
+		// ContextCommodity: terminates on space, tab, EOL
+		{"commodity cursor at end", "    expenses:food  USD", 22, ContextCommodity, 22},
+		{"commodity mid-word", "    expenses:food  USD", 20, ContextCommodity, 22},
+		{"commodity before space", "    expenses:food  USD 100", 22, ContextCommodity, 22},
+		{"commodity before tab", "    expenses:food  USD\t100", 22, ContextCommodity, 22},
+
+		// ContextDate: terminates on space, tab, EOL
+		{"date cursor at end", "2024-01-15", 10, ContextDate, 10},
+		{"date mid-word", "2024-01-15 payee", 8, ContextDate, 10},
+		{"date before space", "2024-01-15 payee", 10, ContextDate, 10},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := findTokenEnd(tt.line, tt.byteCol, tt.ctxType)
+			assert.Equal(t, tt.expected, result, "findTokenEnd(%q, %d, %v)", tt.line, tt.byteCol, tt.ctxType)
+		})
+	}
 }

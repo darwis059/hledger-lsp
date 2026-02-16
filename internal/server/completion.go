@@ -755,11 +755,53 @@ func calculateTextEditRange(content string, pos protocol.Position, ctxType Compl
 		return nil
 	}
 
+	endByte := findTokenEnd(line, byteCol, ctxType)
 	startChar := lsputil.ByteOffsetToUTF16(line, startByte)
+	endChar := lsputil.ByteOffsetToUTF16(line, endByte)
 	return &protocol.Range{
 		Start: protocol.Position{Line: pos.Line, Character: uint32(startChar)},
-		End:   pos,
+		End:   protocol.Position{Line: pos.Line, Character: uint32(endChar)},
 	}
+}
+
+func findTokenEnd(line string, byteCol int, ctxType CompletionContextType) int {
+	if byteCol >= len(line) {
+		return len(line)
+	}
+
+	rest := line[byteCol:]
+
+	switch ctxType {
+	case ContextAccount:
+		for i := 0; i < len(rest); i++ {
+			if rest[i] == '\t' || rest[i] == ';' {
+				return byteCol + i
+			}
+			if i+1 < len(rest) && rest[i] == ' ' && rest[i+1] == ' ' {
+				return byteCol + i
+			}
+		}
+	case ContextPayee:
+		end := len(rest)
+		for i := 0; i < len(rest); i++ {
+			if rest[i] == '|' || rest[i] == ';' {
+				end = i
+				break
+			}
+		}
+		for end > 0 && rest[end-1] == ' ' {
+			end--
+		}
+		return byteCol + end
+	case ContextCommodity, ContextDate:
+		for i := 0; i < len(rest); i++ {
+			if rest[i] == ' ' || rest[i] == '\t' {
+				return byteCol + i
+			}
+		}
+	}
+
+	return len(line)
 }
 
 func findCommodityStart(line string, byteCol int) int {
