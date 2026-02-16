@@ -120,7 +120,11 @@ hledger-lsp registers Enter and Tab as trigger characters for `textDocument/onTy
 
 ### Using eglot
 
-Eglot supports `onTypeFormatting`. Enter should work automatically. Tab may conflict with `electric-indent-mode` or completion frameworks. If so, add a custom binding:
+**Enter** works automatically — eglot sends `onTypeFormatting` via `post-self-insert-hook`, which fires for regular character insertion including newlines.
+
+**Tab requires a custom keybinding.** Eglot triggers `onTypeFormatting` through `post-self-insert-hook`, but Tab in Emacs is handled by `indent-for-tab-command`, not `self-insert-command`. The hook never fires for Tab, so without a workaround Tab inserts a literal `\t` instead of triggering LSP alignment.
+
+Add this to your configuration:
 
 ```elisp
 (defun hledger-align-amount ()
@@ -141,6 +145,27 @@ lsp-mode supports `onTypeFormatting` via `lsp-enable-on-type-formatting`. Ensure
 
 Tab may conflict with `company-mode` or `electric-indent-mode`. A custom keybinding may be needed if Tab does not trigger alignment.
 
+## Configuration
+
+Pass settings to hledger-lsp via `eglot-workspace-configuration`. Without this, the server uses defaults and `workspace/configuration` requests return `null`.
+
+```elisp
+(setq-default eglot-workspace-configuration
+  '(:hledger
+    (:formatting (:indentSize 4 :alignAmounts t :minAlignmentColumn 40)
+     :completion (:maxResults 100 :fuzzyMatching t :includeNotes t)
+     :diagnostics (:undeclaredAccounts t :unbalancedTransactions t))))
+```
+
+For example, to change the amount alignment column to 50:
+
+```elisp
+(setq-default eglot-workspace-configuration
+  '(:hledger (:formatting (:minAlignmentColumn 50))))
+```
+
+See [configuration.md](configuration.md) for the full list of settings.
+
 ## Verify
 
 1. Open a `.journal` file
@@ -158,6 +183,14 @@ Tab may conflict with `company-mode` or `electric-indent-mode`. A custom keybind
 **No completions:**
 - Ensure company-mode or corfu is enabled
 - Check if eglot is active: `M-x eglot-ensure`
+
+**Tab inserts `\t` instead of aligning amounts:**
+- Eglot does not send `onTypeFormatting` for Tab (see [Format on Type](#format-on-type))
+- Add the `hledger-align-amount` keybinding from the section above
+
+**Settings not applied (server uses defaults):**
+- Set `eglot-workspace-configuration` (see [Configuration](#configuration))
+- Verify with `*eglot events*` — look for `workspace/configuration` response
 
 **Wrong major mode:**
 - Verify with `M-x describe-mode`
