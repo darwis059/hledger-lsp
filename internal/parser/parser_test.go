@@ -2263,3 +2263,105 @@ func TestParser_TransactionCodeWithColon(t *testing.T) {
 		assert.Equal(t, "grocery store", journal.Transactions[0].Description)
 	})
 }
+
+func TestParser_PermissiveAccountNames(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		wantAccount string
+		wantAmount  string
+		wantComm    string
+	}{
+		{
+			name: "account with parentheses",
+			input: `2024-01-15 test
+    Assets:Investments:Level Five (SYM2.0)  100 USD
+    Assets:Cash`,
+			wantAccount: "Assets:Investments:Level Five (SYM2.0)",
+			wantAmount:  "100",
+			wantComm:    "USD",
+		},
+		{
+			name: "account with at-sign",
+			input: `2024-01-15 test
+    expenses:cafe@home  50 EUR
+    assets:cash`,
+			wantAccount: "expenses:cafe@home",
+			wantAmount:  "50",
+			wantComm:    "EUR",
+		},
+		{
+			name: "account with equals sign",
+			input: `2024-01-15 test
+    expenses:a=b  50 EUR
+    assets:cash`,
+			wantAccount: "expenses:a=b",
+			wantAmount:  "50",
+			wantComm:    "EUR",
+		},
+		{
+			name: "account with brackets",
+			input: `2024-01-15 test
+    Assets:Fund [2024]  100 USD
+    Assets:Cash`,
+			wantAccount: "Assets:Fund [2024]",
+			wantAmount:  "100",
+			wantComm:    "USD",
+		},
+		{
+			name: "account with semicolon",
+			input: `2024-01-15 test
+    expenses:food;drink  50 EUR
+    assets:cash`,
+			wantAccount: "expenses:food;drink",
+			wantAmount:  "50",
+			wantComm:    "EUR",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			journal, errs := Parse(tt.input)
+			require.Empty(t, errs, "unexpected parse errors: %v", errs)
+			require.Len(t, journal.Transactions, 1)
+			require.GreaterOrEqual(t, len(journal.Transactions[0].Postings), 2)
+
+			p := journal.Transactions[0].Postings[0]
+			assert.Equal(t, tt.wantAccount, p.Account.Name)
+			require.NotNil(t, p.Amount, "amount should not be nil")
+			assert.Equal(t, tt.wantAmount, p.Amount.Quantity.String())
+			assert.Equal(t, tt.wantComm, p.Amount.Commodity.Symbol)
+		})
+	}
+}
+
+func TestParser_VirtualPostingsWithPermissiveNames(t *testing.T) {
+	input := `2024-01-15 transaction with virtual postings
+    expenses:food           $50
+    assets:cash            $-50
+    [budget:food]          $-50
+    [budget:available]      $50
+    (tracking:note)`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	tx := journal.Transactions[0]
+	require.Len(t, tx.Postings, 5)
+
+	assert.Equal(t, ast.VirtualNone, tx.Postings[0].Virtual)
+	assert.Equal(t, "expenses:food", tx.Postings[0].Account.Name)
+
+	assert.Equal(t, ast.VirtualNone, tx.Postings[1].Virtual)
+	assert.Equal(t, "assets:cash", tx.Postings[1].Account.Name)
+
+	assert.Equal(t, ast.VirtualBalanced, tx.Postings[2].Virtual)
+	assert.Equal(t, "budget:food", tx.Postings[2].Account.Name)
+
+	assert.Equal(t, ast.VirtualBalanced, tx.Postings[3].Virtual)
+	assert.Equal(t, "budget:available", tx.Postings[3].Account.Name)
+
+	assert.Equal(t, ast.VirtualUnbalanced, tx.Postings[4].Virtual)
+	assert.Equal(t, "tracking:note", tx.Postings[4].Account.Name)
+}

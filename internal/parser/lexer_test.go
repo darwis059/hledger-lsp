@@ -1856,3 +1856,158 @@ func TestLexer_CodeWithColon(t *testing.T) {
 		require.NotNil(t, tok, "expected TokenLParen for virtual account on posting line")
 	})
 }
+
+func TestLexer_PermissiveAccountNames(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []Token
+	}{
+		{
+			name:  "account with parentheses",
+			input: "    Assets:Level Five (SYM2.0)  100 USD",
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "Assets:Level Five (SYM2.0)"},
+				{Type: TokenNumber, Value: "100"},
+				{Type: TokenCommodity, Value: "USD"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "account with brackets",
+			input: "    Assets:Fund [2024]  100 USD",
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "Assets:Fund [2024]"},
+				{Type: TokenNumber, Value: "100"},
+				{Type: TokenCommodity, Value: "USD"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "account with at-sign",
+			input: "    expenses:cafe@home  50 EUR",
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "expenses:cafe@home"},
+				{Type: TokenNumber, Value: "50"},
+				{Type: TokenCommodity, Value: "EUR"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "account with equals",
+			input: "    expenses:a=b  50 EUR",
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "expenses:a=b"},
+				{Type: TokenNumber, Value: "50"},
+				{Type: TokenCommodity, Value: "EUR"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "account with semicolon",
+			input: "    expenses:food;drink  50 EUR",
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "expenses:food;drink"},
+				{Type: TokenNumber, Value: "50"},
+				{Type: TokenCommodity, Value: "EUR"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "complex special chars from issue",
+			input: "    Expenses:Some account (~`@#$%^&*_-+={}[]|,.<>?/\"'\\)  100 USD",
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "Expenses:Some account (~`@#$%^&*_-+={}[]|,.<>?/\"'\\)"},
+				{Type: TokenNumber, Value: "100"},
+				{Type: TokenCommodity, Value: "USD"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "account without amount with special chars",
+			input: "    Assets:Level Five (SYM2.0)",
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "Assets:Level Five (SYM2.0)"},
+				{Type: TokenEOF},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			tokens := collectTokens(lexer)
+			assertTokenTypesAndValues(t, tt.want, tokens)
+		})
+	}
+}
+
+func TestLexer_VirtualPostingsRegression(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []Token
+	}{
+		{
+			name:  "virtual unbalanced with amount",
+			input: "2024-01-15 test\n    (budget:food)  $50",
+			want: []Token{
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenText, Value: "test"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenLParen, Value: "("},
+				{Type: TokenAccount, Value: "budget:food"},
+				{Type: TokenRParen, Value: ")"},
+				{Type: TokenCommodity, Value: "$"},
+				{Type: TokenNumber, Value: "50"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "virtual balanced with amount",
+			input: "2024-01-15 test\n    [budget:food]  $50",
+			want: []Token{
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenText, Value: "test"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenLBracket, Value: "["},
+				{Type: TokenAccount, Value: "budget:food"},
+				{Type: TokenRBracket, Value: "]"},
+				{Type: TokenCommodity, Value: "$"},
+				{Type: TokenNumber, Value: "50"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "virtual unbalanced without amount",
+			input: "2024-01-15 test\n    (tracking:note)",
+			want: []Token{
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenText, Value: "test"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenLParen, Value: "("},
+				{Type: TokenAccount, Value: "tracking:note"},
+				{Type: TokenRParen, Value: ")"},
+				{Type: TokenEOF},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			tokens := collectTokens(lexer)
+			assertTokenTypesAndValues(t, tt.want, tokens)
+		})
+	}
+}

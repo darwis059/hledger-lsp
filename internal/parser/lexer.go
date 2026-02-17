@@ -18,6 +18,7 @@ type Lexer struct {
 	onPostingLine bool
 	afterSign     bool
 	afterNumber   bool
+	virtualCloser rune
 }
 
 func NewLexer(input string) *Lexer {
@@ -99,6 +100,7 @@ func (l *Lexer) scanInLine() Token {
 		return l.scanComment()
 	case ch == '(':
 		if l.looksLikeVirtualAccount() {
+			l.virtualCloser = ')'
 			l.advance()
 			return l.makeToken(TokenLParen, "(")
 		}
@@ -107,6 +109,9 @@ func (l *Lexer) scanInLine() Token {
 		l.advance()
 		return l.makeToken(TokenRParen, ")")
 	case ch == '[':
+		if l.onPostingLine {
+			l.virtualCloser = ']'
+		}
 		l.advance()
 		return l.makeToken(TokenLBracket, "[")
 	case ch == ']':
@@ -279,6 +284,7 @@ func (l *Lexer) scanNewline() Token {
 	l.onPostingLine = false
 	l.afterNumber = false
 	l.afterSign = false
+	l.virtualCloser = 0
 	// Check if next line starts at column 1 (not indented) - this ends the transaction or directive
 	if l.pos < len(l.input) && !l.isWhitespace(l.peek()) {
 		l.inTransaction = false
@@ -305,6 +311,11 @@ func (l *Lexer) scanAccount() Token {
 			continue
 		}
 
+		if l.virtualCloser != 0 && r == l.virtualCloser {
+			l.virtualCloser = 0
+			break
+		}
+
 		if isAccountTerminator(r) {
 			break
 		}
@@ -322,16 +333,11 @@ func (l *Lexer) scanAccount() Token {
 }
 
 // isAccountTerminator returns true for characters that end account names in hledger format.
-// Per hledger manual: account names may contain any characters except:
-// - tab/newline: line terminators
-// - semicolon: starts a comment
-// - @ : starts cost annotation
-// - = : starts balance assertion
-// - () : virtual posting markers (unbalanced)
-// - [] : virtual posting markers (balanced)
+// Per hledger manual: account names end only at double-space (2+ spaces), tab, or newline.
+// The double-space check is handled in scanAccount() before this function is called.
 func isAccountTerminator(r rune) bool {
 	switch r {
-	case '\t', '\n', '\r', ';', '@', '=', '(', ')', '[', ']':
+	case '\t', '\n', '\r':
 		return true
 	}
 	return false
@@ -770,6 +776,8 @@ func (l *Lexer) looksLikeAccount() bool {
 			}
 			i += size
 		} else if isAccountTerminator(r) {
+			break
+		} else if r == '=' && l.inDirective {
 			break
 		} else {
 			i += size
