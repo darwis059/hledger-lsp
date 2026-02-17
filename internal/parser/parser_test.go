@@ -1984,6 +1984,15 @@ func TestParser_PrefixCommodityAfterBareNumber(t *testing.T) {
 	assert.Equal(t, "11,00", p3.Amount.RawQuantity)
 }
 
+func TestParseError_Error_IncludesRange(t *testing.T) {
+	err := ParseError{
+		Message: "test error",
+		Pos:     Position{Line: 1, Column: 1},
+		End:     Position{Line: 1, Column: 5},
+	}
+	assert.Equal(t, "1:1-1:5: test error", err.Error())
+}
+
 func TestParseError_End_ExpectedAccountName(t *testing.T) {
 	input := "2024-01-15 test\n    12345"
 
@@ -2016,7 +2025,7 @@ func TestParseError_End_AtEOF(t *testing.T) {
 
 	_, errs := Parse(input)
 	if len(errs) == 0 {
-		return
+		t.Skip("parser does not produce an error for trailing whitespace; End-at-EOF assertion is not applicable")
 	}
 
 	err := errs[0]

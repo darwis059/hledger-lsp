@@ -333,12 +333,12 @@ func (s *Server) analyze(content string) []protocol.Diagnostic {
 		diagnostics = append(diagnostics, protocol.Diagnostic{
 			Range: protocol.Range{
 				Start: protocol.Position{
-					Line:      uint32(err.Pos.Line - 1),
-					Character: uint32(err.Pos.Column - 1),
+					Line:      uint32(max(0, err.Pos.Line-1)),
+					Character: uint32(max(0, err.Pos.Column-1)),
 				},
 				End: protocol.Position{
-					Line:      uint32(err.End.Line - 1),
-					Character: uint32(err.End.Column - 1),
+					Line:      uint32(max(0, err.End.Line-1)),
+					Character: uint32(max(0, err.End.Column-1)),
 				},
 			},
 			Severity: protocol.DiagnosticSeverityError,
@@ -368,12 +368,12 @@ func (s *Server) analyze(content string) []protocol.Diagnostic {
 		diagnostics = append(diagnostics, protocol.Diagnostic{
 			Range: protocol.Range{
 				Start: protocol.Position{
-					Line:      uint32(diag.Range.Start.Line - 1),
-					Character: uint32(diag.Range.Start.Column - 1),
+					Line:      uint32(max(0, diag.Range.Start.Line-1)),
+					Character: uint32(max(0, diag.Range.Start.Column-1)),
 				},
 				End: protocol.Position{
-					Line:      uint32(diag.Range.End.Line - 1),
-					Character: uint32(diag.Range.End.Column - 1),
+					Line:      uint32(max(0, diag.Range.End.Line-1)),
+					Character: uint32(max(0, diag.Range.End.Column-1)),
 				},
 			},
 			Severity: toProtocolSeverity(diag.Severity),

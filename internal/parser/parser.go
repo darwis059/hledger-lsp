@@ -18,7 +18,7 @@ type ParseError struct {
 }
 
 func (e ParseError) Error() string {
-	return fmt.Sprintf("%d:%d: %s", e.Pos.Line, e.Pos.Column, e.Message)
+	return fmt.Sprintf("%d:%d-%d:%d: %s", e.Pos.Line, e.Pos.Column, e.End.Line, e.End.Column, e.Message)
 }
 
 type Parser struct {
