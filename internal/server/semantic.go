@@ -404,13 +404,13 @@ func extractTagTokensFromComment(tok parser.Token) []semanticToken {
 		}
 		tagStart += searchStart
 
-		// Tag name with colon: "name:"
-		tagNameWithColonLen := uint32(len(name) + 1)
+		tagNameWithColonLen := uint32(lsputil.UTF16Len(name) + 1)
+		tagColUTF16 := uint32(lsputil.UTF16Len(commentText[:tagStart]))
 
 		// +1 to baseCol accounts for the semicolon that starts the comment
 		tokens = append(tokens, semanticToken{
 			line:      baseLine,
-			col:       baseCol + 1 + uint32(tagStart),
+			col:       baseCol + 1 + tagColUTF16,
 			length:    tagNameWithColonLen,
 			tokenType: TokenTypeTag,
 			modifiers: 0,
@@ -424,10 +424,11 @@ func extractTagTokensFromComment(tok parser.Token) []semanticToken {
 				tagNameEnd := tagStart + len(name) + 1
 				valueStart := strings.Index(commentText[tagNameEnd:], value)
 				if valueStart != -1 {
+					valueColUTF16 := uint32(lsputil.UTF16Len(commentText[:tagNameEnd+valueStart]))
 					tokens = append(tokens, semanticToken{
 						line:      baseLine,
-						col:       baseCol + 1 + uint32(tagNameEnd+valueStart),
-						length:    uint32(len(value)),
+						col:       baseCol + 1 + valueColUTF16,
+						length:    uint32(lsputil.UTF16Len(value)),
 						tokenType: TokenTypeTagValue,
 						modifiers: 0,
 					})

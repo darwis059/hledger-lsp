@@ -985,6 +985,38 @@ func TestParser_TagsInPostingComment(t *testing.T) {
 	assert.Equal(t, "123", p.Tags[1].Value)
 }
 
+func TestParser_TagPositionsAfterCyrillicText(t *testing.T) {
+	// Comment text after ";" is " Расходы, client:acme"
+	// Comma separates "Расходы" (not a tag) from "client:acme" (valid tag).
+	// parseTags uses strings.Index (byte-based) to find "client:" in the full
+	// comment text, but basePos.Column is rune-based from the lexer.
+	// "Расходы" = 7 Cyrillic chars = 14 UTF-8 bytes, so byte vs rune offset differs.
+	input := `2024-01-15 test ; Расходы, client:acme
+    expenses:food  $50
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	tx := journal.Transactions[0]
+	require.Len(t, tx.Comments, 1)
+	require.Len(t, tx.Comments[0].Tags, 1)
+
+	tag := tx.Comments[0].Tags[0]
+	assert.Equal(t, "client", tag.Name)
+	assert.Equal(t, "acme", tag.Value)
+
+	// "2024-01-15 test " = 16 chars. ";" at col 17 (1-based rune).
+	// Comment text = " Расходы, client:acme"
+	// Rune offsets in comment text: " "=0, "Р"=1,...,"ы"=7, ","=8, " "=9, "c"=10
+	// "client" starts at rune 10 in comment text.
+	// Tag start col = 17 (semicolonCol) + 1 (skip semicolon) + 10 = 28
+	// Tag end col = 28 + 6 (client) + 1 (:) + 4 (acme) = 39
+	assert.Equal(t, 28, tag.Range.Start.Column, "tag start column should be rune-based")
+	assert.Equal(t, 39, tag.Range.End.Column, "tag end column should be rune-based")
+}
+
 func TestParser_YearDirective(t *testing.T) {
 	tests := []struct {
 		name  string

@@ -3,10 +3,12 @@ package server
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/shopspring/decimal"
 	"go.lsp.dev/protocol"
 
 	"github.com/juev/hledger-lsp/internal/analyzer"
@@ -232,21 +234,27 @@ func buildAccountHoverWithTransactions(accountName string, balances analyzer.Acc
 		defSymbol := defaultCommoditySymbol(directives)
 		enrichCommodityFormatsFromTransactions(commodityFormats, transactions)
 
+		displayBalances := make(map[string]decimal.Decimal, len(commodityBalances))
+		maps.Copy(displayBalances, commodityBalances)
+
+		if defSymbol != "" {
+			if emptyBal, hasEmpty := displayBalances[""]; hasEmpty {
+				displayBalances[defSymbol] = displayBalances[defSymbol].Add(emptyBal)
+				delete(displayBalances, "")
+			}
+		}
+
 		sb.WriteString("**Balance:**\n")
 
-		commodities := make([]string, 0, len(commodityBalances))
-		for c := range commodityBalances {
+		commodities := make([]string, 0, len(displayBalances))
+		for c := range displayBalances {
 			commodities = append(commodities, c)
 		}
 		sort.Strings(commodities)
 
 		for _, c := range commodities {
-			bal := commodityBalances[c]
-			symbol := c
-			if symbol == "" && defSymbol != "" {
-				symbol = defSymbol
-			}
-			fmt.Fprintf(&sb, "- %s\n", formatter.FormatBalance(bal, symbol, commodityFormats))
+			bal := displayBalances[c]
+			fmt.Fprintf(&sb, "- %s\n", formatter.FormatBalance(bal, c, commodityFormats))
 		}
 		sb.WriteString("\n")
 	}

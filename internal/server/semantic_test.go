@@ -648,3 +648,83 @@ func TestSemanticTokens_CompleteExample(t *testing.T) {
 	assert.Equal(t, 2, foundVirtual, "expected 2 virtual account tokens")
 	assert.Equal(t, 2, foundRegularAccount, "expected 2 regular account tokens")
 }
+
+func TestSemanticTokens_CyrillicTagPositions(t *testing.T) {
+	tests := []struct {
+		name          string
+		content       string
+		wantPositions []struct {
+			tokenType uint32
+			col       uint32
+			length    uint32
+		}
+	}{
+		{
+			name:    "cyrillic tag name with ascii value",
+			content: "; клиент:acme",
+			// "; " = 2 chars, "клиент:" = 7 chars (6 + colon), "acme" = 4 chars
+			// tag col=2, length=7 (UTF-16: клиент=6 + :=1)
+			// value col=9, length=4
+			wantPositions: []struct {
+				tokenType uint32
+				col       uint32
+				length    uint32
+			}{
+				{tokenType: TokenTypeTag, col: 2, length: 7},
+				{tokenType: TokenTypeTagValue, col: 9, length: 4},
+			},
+		},
+		{
+			name:    "ascii tag name with cyrillic value",
+			content: "; tag:Транспорт",
+			// "; " = 2 chars, "tag:" = 4 chars, "Транспорт" = 9 chars
+			// tag col=2, length=4
+			// value col=6, length=9
+			wantPositions: []struct {
+				tokenType uint32
+				col       uint32
+				length    uint32
+			}{
+				{tokenType: TokenTypeTag, col: 2, length: 4},
+				{tokenType: TokenTypeTagValue, col: 6, length: 9},
+			},
+		},
+		{
+			name:    "cyrillic tag name and value",
+			content: "; тег:значение",
+			// "; " = 2 chars, "тег:" = 4 chars (3 + colon), "значение" = 8 chars
+			// tag col=2, length=4
+			// value col=6, length=8
+			wantPositions: []struct {
+				tokenType uint32
+				col       uint32
+				length    uint32
+			}{
+				{tokenType: TokenTypeTag, col: 2, length: 4},
+				{tokenType: TokenTypeTagValue, col: 6, length: 8},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeForSemantics(tt.content)
+			require.NotEmpty(t, tokens, "expected tokens")
+
+			var tagRelatedTokens []semanticToken
+			for _, tok := range tokens {
+				if tok.tokenType == TokenTypeTag || tok.tokenType == TokenTypeTagValue {
+					tagRelatedTokens = append(tagRelatedTokens, tok)
+				}
+			}
+
+			require.Len(t, tagRelatedTokens, len(tt.wantPositions), "token count mismatch")
+
+			for i, want := range tt.wantPositions {
+				assert.Equal(t, want.tokenType, tagRelatedTokens[i].tokenType, "token %d type", i)
+				assert.Equal(t, want.col, tagRelatedTokens[i].col, "token %d col", i)
+				assert.Equal(t, want.length, tagRelatedTokens[i].length, "token %d length", i)
+			}
+		})
+	}
+}

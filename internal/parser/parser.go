@@ -1194,8 +1194,8 @@ func parseTags(text string, basePos Position) []ast.Tag {
 			}
 		}
 
-		startCol := basePos.Column + 1 + tagStart
-		endCol := basePos.Column + 1 + tagEnd
+		startCol := basePos.Column + 1 + utf8.RuneCountInString(text[:tagStart])
+		endCol := basePos.Column + 1 + utf8.RuneCountInString(text[:tagEnd])
 
 		tags = append(tags, ast.Tag{
 			Name:  name,

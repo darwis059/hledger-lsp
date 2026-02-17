@@ -981,3 +981,76 @@ func TestHover_CostFormattedWithCommodityDirective(t *testing.T) {
 
 	assert.Contains(t, result.Contents.Value, "15.000,00 EUR")
 }
+
+func TestHover_AccountBalanceMergesEmptyCommodityWithDefault(t *testing.T) {
+	srv := NewServer()
+	// Default commodity is RUB. One posting on the account has explicit "RUB",
+	// another has no commodity (stored as key ""). Both should be merged into
+	// a single "RUB" balance line on hover.
+	content := `D 1.000,00 RUB
+
+2024-01-15 Магазин
+    Расходы:Еда  500,00 RUB
+    Активы:Банк  -500,00 RUB
+
+2024-01-16 Транспорт
+    Расходы:Транспорт  71,00
+    Активы:Банк  -71,00`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	// Hover over Активы:Банк — should show single consolidated RUB balance
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 6},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Should show exactly one balance line, not two separate "RUB" lines
+	balanceSection := result.Contents.Value
+	assert.Contains(t, balanceSection, "RUB")
+	// Count occurrences of "RUB" in balance lines — should be exactly 1
+	rubCount := strings.Count(balanceSection, "RUB")
+	assert.Equal(t, 1, rubCount, "expected single consolidated RUB balance line, got %d occurrences:\n%s", rubCount, balanceSection)
+}
+
+func TestHover_AccountBalanceNoDefaultCommodityKeepsSeparate(t *testing.T) {
+	srv := NewServer()
+	// No default commodity directive. Postings with explicit commodity and without
+	// should remain separate — two balance lines.
+	content := `2024-01-15 Магазин
+    Расходы:Еда  500,00 RUB
+    Активы:Банк  -500,00 RUB
+
+2024-01-16 Транспорт
+    Расходы:Транспорт  71,00
+    Активы:Банк  -71,00`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	// Hover over Активы:Банк
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 2, Character: 6},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Without default commodity, we can't merge — should have two balance lines
+	assert.Contains(t, result.Contents.Value, "Balance")
+	assert.Contains(t, result.Contents.Value, "RUB")
+	assert.Contains(t, result.Contents.Value, "-71")
+}
