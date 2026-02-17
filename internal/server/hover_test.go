@@ -667,3 +667,76 @@ func TestHover_PartialDateWithStatus(t *testing.T) {
 	assert.Contains(t, result.Contents.Value, "Payee")
 	assert.Contains(t, result.Contents.Value, "Магазин")
 }
+
+func TestDefaultCommoditySymbol(t *testing.T) {
+	t.Run("returns symbol from DefaultCommodityDirective", func(t *testing.T) {
+		directives := []ast.Directive{
+			ast.DefaultCommodityDirective{Symbol: "EUR"},
+		}
+		assert.Equal(t, "EUR", defaultCommoditySymbol(directives))
+	})
+
+	t.Run("returns empty string when no default commodity", func(t *testing.T) {
+		directives := []ast.Directive{
+			ast.AccountDirective{Account: ast.Account{Name: "expenses:food"}},
+		}
+		assert.Equal(t, "", defaultCommoditySymbol(directives))
+	})
+
+	t.Run("returns empty string for nil directives", func(t *testing.T) {
+		assert.Equal(t, "", defaultCommoditySymbol(nil))
+	})
+}
+
+func TestHover_AmountWithDefaultCommodity(t *testing.T) {
+	srv := NewServer()
+	content := `D 1.000,00 EUR
+
+2024-01-15 test
+    expenses:food  1.000,00
+    assets:cash`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 3, Character: 19},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Contains(t, result.Contents.Value, "EUR")
+}
+
+func TestHover_AmountWithDefaultCommodity_ExplicitOverrides(t *testing.T) {
+	srv := NewServer()
+	content := `D 1.000,00 EUR
+
+2024-01-15 test
+    expenses:food  $50.00
+    assets:cash`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 3, Character: 19},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Contains(t, result.Contents.Value, "$")
+	assert.NotContains(t, result.Contents.Value, "EUR")
+}

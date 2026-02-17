@@ -55,16 +55,21 @@ func (s *Server) Hover(ctx context.Context, params *protocol.HoverParams) (*prot
 
 	var balances analyzer.AccountBalances
 	var allTransactions []ast.Transaction
+	var directives []ast.Directive
 
 	if resolved := s.getWorkspaceResolved(params.TextDocument.URI); resolved != nil {
 		allTransactions = resolved.AllTransactions()
+		directives = resolved.AllDirectives()
 		balances = analyzer.CalculateAccountBalancesFromTransactions(allTransactions)
 	} else {
 		allTransactions = journal.Transactions
+		directives = journal.Directives
 		balances = analyzer.CalculateAccountBalances(journal)
 	}
 
-	content := buildHoverContentWithTransactions(element, balances, allTransactions)
+	defaultCommodity := defaultCommoditySymbol(directives)
+
+	content := buildHoverContentWithTransactions(element, balances, allTransactions, defaultCommodity)
 	if content == "" {
 		return nil, nil
 	}
@@ -197,12 +202,12 @@ func payeeRange(tx *ast.Transaction, payee string) ast.Range {
 	}
 }
 
-func buildHoverContentWithTransactions(element *hoverElement, balances analyzer.AccountBalances, transactions []ast.Transaction) string {
+func buildHoverContentWithTransactions(element *hoverElement, balances analyzer.AccountBalances, transactions []ast.Transaction, defaultCommodity string) string {
 	switch element.context {
 	case HoverAccount:
 		return buildAccountHoverWithTransactions(element.account.Name, balances, transactions)
 	case HoverAmount:
-		return buildAmountHover(element.amount, element.cost)
+		return buildAmountHover(element.amount, element.cost, defaultCommodity)
 	case HoverPayee:
 		return buildPayeeHoverWithTransactions(element.payee, transactions)
 	case HoverDate:
@@ -243,10 +248,24 @@ func buildAccountHoverWithTransactions(accountName string, balances analyzer.Acc
 	return sb.String()
 }
 
-func buildAmountHover(amount *ast.Amount, cost *ast.Cost) string {
+func defaultCommoditySymbol(directives []ast.Directive) string {
+	for _, dir := range directives {
+		if d, ok := dir.(ast.DefaultCommodityDirective); ok {
+			return d.Symbol
+		}
+	}
+	return ""
+}
+
+func buildAmountHover(amount *ast.Amount, cost *ast.Cost, defaultCommodity string) string {
 	var sb strings.Builder
 
-	fmt.Fprintf(&sb, "**Amount:** %s %s", amount.Quantity.String(), amount.Commodity.Symbol)
+	commodity := amount.Commodity.Symbol
+	if commodity == "" {
+		commodity = defaultCommodity
+	}
+
+	fmt.Fprintf(&sb, "**Amount:** %s %s", amount.Quantity.String(), commodity)
 
 	if cost != nil {
 		if cost.IsTotal {
