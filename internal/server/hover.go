@@ -277,63 +277,20 @@ func buildAmountHover(amount *ast.Amount, cost *ast.Cost, commodityFormats map[s
 }
 
 func formatAmountForHover(amount *ast.Amount, commodityFormats map[string]formatter.CommodityFormat, defaultSymbol string) string {
-	symbol := amount.Commodity.Symbol
-	position := amount.Commodity.Position
-	spaceBetween := position == ast.CommodityRight
-
-	if symbol == "" && defaultSymbol != "" {
-		symbol = defaultSymbol
-		if cf, ok := commodityFormats[symbol]; ok {
-			position = cf.Position
-			spaceBetween = cf.SpaceBetween
-		} else if cf, ok := commodityFormats[""]; ok {
-			position = cf.Position
-			spaceBetween = cf.SpaceBetween
-		}
-	} else if symbol != "" {
-		if cf, ok := commodityFormats[symbol]; ok {
-			position = cf.Position
-			spaceBetween = cf.SpaceBetween
-		}
-	}
-
-	qty := hoverQuantity(amount, commodityFormats)
-
-	if symbol == "" {
-		return qty
-	}
-
-	var sb strings.Builder
-	if position == ast.CommodityLeft {
-		sb.WriteString(symbol)
-		if spaceBetween {
-			sb.WriteString(" ")
-		}
-		sb.WriteString(qty)
-	} else {
-		sb.WriteString(qty)
-		if spaceBetween {
-			sb.WriteString(" ")
-		}
-		sb.WriteString(symbol)
-	}
-	return sb.String()
-}
-
-func hoverQuantity(amount *ast.Amount, commodityFormats map[string]formatter.CommodityFormat) string {
 	if amount.Commodity.Symbol != "" {
-		if cf, ok := commodityFormats[amount.Commodity.Symbol]; ok {
-			return formatter.FormatNumber(amount.Quantity, cf.NumberFormat)
+		if _, ok := commodityFormats[amount.Commodity.Symbol]; ok {
+			return formatter.FormatAmount(amount, commodityFormats)
 		}
-	} else {
-		if cf, ok := commodityFormats[""]; ok {
-			return formatter.FormatNumber(amount.Quantity, cf.NumberFormat)
-		}
+		return formatter.FormatAmount(amount, nil)
 	}
-	if amount.RawQuantity != "" {
-		return amount.RawQuantity
+
+	if defaultSymbol != "" {
+		displayAmount := *amount
+		displayAmount.Commodity.Symbol = defaultSymbol
+		return formatter.FormatAmount(&displayAmount, commodityFormats)
 	}
-	return amount.Quantity.String()
+
+	return formatter.FormatAmount(amount, nil)
 }
 
 func buildPayeeHoverWithTransactions(payee string, transactions []ast.Transaction) string {

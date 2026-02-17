@@ -114,6 +114,8 @@ func trimTrailingSpacesEdits(content string, mapper *lsputil.PositionMapper, pos
 	return edits
 }
 
+// ExtractCommodityFormats builds a commodity symbol → format map from directives.
+// The empty string key ("") holds the default format from the D directive.
 func ExtractCommodityFormats(directives []ast.Directive) map[string]CommodityFormat {
 	formats := make(map[string]CommodityFormat)
 	var defaultFormat *CommodityFormat
@@ -419,6 +421,15 @@ func writeAmountWithSign(sb *strings.Builder, amount *ast.Amount, commodityForma
 			sb.WriteString(amount.Commodity.Symbol)
 		}
 	}
+}
+
+// FormatAmount renders an amount as a string with commodity symbol, respecting
+// position, spacing, and number format from commodityFormats.
+// Pass nil commodityFormats to use the amount's raw formatting.
+func FormatAmount(amount *ast.Amount, commodityFormats map[string]CommodityFormat) string {
+	var sb strings.Builder
+	writeAmountWithSign(&sb, amount, commodityFormats)
+	return sb.String()
 }
 
 func formatAmountQuantity(amount *ast.Amount, commodityFormats map[string]CommodityFormat) string {
