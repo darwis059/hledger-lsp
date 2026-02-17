@@ -11,6 +11,7 @@ import (
 
 	"github.com/juev/hledger-lsp/internal/analyzer"
 	"github.com/juev/hledger-lsp/internal/ast"
+	"github.com/juev/hledger-lsp/internal/formatter"
 	"github.com/juev/hledger-lsp/internal/lsputil"
 	"github.com/juev/hledger-lsp/internal/parser"
 )
@@ -205,7 +206,9 @@ func buildHoverContentWithTransactions(element *hoverElement, balances analyzer.
 	case HoverAccount:
 		return buildAccountHoverWithTransactions(element.account.Name, balances, transactions)
 	case HoverAmount:
-		return buildAmountHover(element.amount, element.cost, defaultCommodityInfo(directives))
+		commodityFormats := formatter.ExtractCommodityFormats(directives)
+		defSymbol := defaultCommoditySymbol(directives)
+		return buildAmountHover(element.amount, element.cost, commodityFormats, defSymbol)
 	case HoverPayee:
 		return buildPayeeHoverWithTransactions(element.payee, transactions)
 	case HoverDate:
@@ -246,54 +249,23 @@ func buildAccountHoverWithTransactions(accountName string, balances analyzer.Acc
 	return sb.String()
 }
 
-type commodityInfo struct {
-	symbol   string
-	position ast.CommodityPosition
-}
-
-func defaultCommodityInfo(directives []ast.Directive) commodityInfo {
-	var info commodityInfo
+func defaultCommoditySymbol(directives []ast.Directive) string {
+	var symbol string
 	for _, dir := range directives {
 		if d, ok := dir.(ast.DefaultCommodityDirective); ok {
-			info.symbol = d.Symbol
-			if d.Symbol != "" && strings.HasPrefix(d.Format, d.Symbol) {
-				info.position = ast.CommodityLeft
-			} else {
-				info.position = ast.CommodityRight
-			}
+			symbol = d.Symbol
 		}
 	}
-	return info
+	return symbol
 }
 
-func formatCommodityAmount(quantity string, symbol string, position ast.CommodityPosition) string {
-	if symbol == "" {
-		return quantity
-	}
-	if position == ast.CommodityLeft {
-		return symbol + quantity
-	}
-	return quantity + " " + symbol
-}
-
-func buildAmountHover(amount *ast.Amount, cost *ast.Cost, defCommodity commodityInfo) string {
+func buildAmountHover(amount *ast.Amount, cost *ast.Cost, commodityFormats map[string]formatter.CommodityFormat, defaultSymbol string) string {
 	var sb strings.Builder
 
-	commodity := amount.Commodity.Symbol
-	position := amount.Commodity.Position
-	if commodity == "" && defCommodity.symbol != "" {
-		commodity = defCommodity.symbol
-		position = defCommodity.position
-	}
-
-	fmt.Fprintf(&sb, "**Amount:** %s", formatCommodityAmount(amount.Quantity.String(), commodity, position))
+	fmt.Fprintf(&sb, "**Amount:** %s", formatAmountForHover(amount, commodityFormats, defaultSymbol))
 
 	if cost != nil {
-		costFormatted := formatCommodityAmount(
-			cost.Amount.Quantity.String(),
-			cost.Amount.Commodity.Symbol,
-			cost.Amount.Commodity.Position,
-		)
+		costFormatted := formatAmountForHover(&cost.Amount, commodityFormats, "")
 		if cost.IsTotal {
 			fmt.Fprintf(&sb, "\n\n**Total cost:** @@ %s", costFormatted)
 		} else {
@@ -302,6 +274,66 @@ func buildAmountHover(amount *ast.Amount, cost *ast.Cost, defCommodity commodity
 	}
 
 	return sb.String()
+}
+
+func formatAmountForHover(amount *ast.Amount, commodityFormats map[string]formatter.CommodityFormat, defaultSymbol string) string {
+	symbol := amount.Commodity.Symbol
+	position := amount.Commodity.Position
+	spaceBetween := position == ast.CommodityRight
+
+	if symbol == "" && defaultSymbol != "" {
+		symbol = defaultSymbol
+		if cf, ok := commodityFormats[symbol]; ok {
+			position = cf.Position
+			spaceBetween = cf.SpaceBetween
+		} else if cf, ok := commodityFormats[""]; ok {
+			position = cf.Position
+			spaceBetween = cf.SpaceBetween
+		}
+	} else if symbol != "" {
+		if cf, ok := commodityFormats[symbol]; ok {
+			position = cf.Position
+			spaceBetween = cf.SpaceBetween
+		}
+	}
+
+	qty := hoverQuantity(amount, commodityFormats)
+
+	if symbol == "" {
+		return qty
+	}
+
+	var sb strings.Builder
+	if position == ast.CommodityLeft {
+		sb.WriteString(symbol)
+		if spaceBetween {
+			sb.WriteString(" ")
+		}
+		sb.WriteString(qty)
+	} else {
+		sb.WriteString(qty)
+		if spaceBetween {
+			sb.WriteString(" ")
+		}
+		sb.WriteString(symbol)
+	}
+	return sb.String()
+}
+
+func hoverQuantity(amount *ast.Amount, commodityFormats map[string]formatter.CommodityFormat) string {
+	if amount.Commodity.Symbol != "" {
+		if cf, ok := commodityFormats[amount.Commodity.Symbol]; ok {
+			return formatter.FormatNumber(amount.Quantity, cf.NumberFormat)
+		}
+	} else {
+		if cf, ok := commodityFormats[""]; ok {
+			return formatter.FormatNumber(amount.Quantity, cf.NumberFormat)
+		}
+	}
+	if amount.RawQuantity != "" {
+		return amount.RawQuantity
+	}
+	return amount.Quantity.String()
 }
 
 func buildPayeeHoverWithTransactions(payee string, transactions []ast.Transaction) string {

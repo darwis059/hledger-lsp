@@ -168,7 +168,7 @@ func TestHover_AmountSuffixCommodity(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	assert.Contains(t, result.Contents.Value, "50 EUR")
+	assert.Contains(t, result.Contents.Value, "50.00 EUR")
 }
 
 func TestHover_Payee(t *testing.T) {
@@ -694,23 +694,23 @@ func TestHover_PartialDateWithStatus(t *testing.T) {
 	assert.Contains(t, result.Contents.Value, "Магазин")
 }
 
-func TestDefaultCommodityInfo(t *testing.T) {
+func TestDefaultCommoditySymbol(t *testing.T) {
 	t.Run("returns symbol from DefaultCommodityDirective", func(t *testing.T) {
 		directives := []ast.Directive{
 			ast.DefaultCommodityDirective{Symbol: "EUR"},
 		}
-		assert.Equal(t, "EUR", defaultCommodityInfo(directives).symbol)
+		assert.Equal(t, "EUR", defaultCommoditySymbol(directives))
 	})
 
 	t.Run("returns empty string when no default commodity", func(t *testing.T) {
 		directives := []ast.Directive{
 			ast.AccountDirective{Account: ast.Account{Name: "expenses:food"}},
 		}
-		assert.Equal(t, "", defaultCommodityInfo(directives).symbol)
+		assert.Equal(t, "", defaultCommoditySymbol(directives))
 	})
 
 	t.Run("returns empty string for nil directives", func(t *testing.T) {
-		assert.Equal(t, "", defaultCommodityInfo(nil).symbol)
+		assert.Equal(t, "", defaultCommoditySymbol(nil))
 	})
 
 	t.Run("returns last directive when multiple exist", func(t *testing.T) {
@@ -719,25 +719,7 @@ func TestDefaultCommodityInfo(t *testing.T) {
 			ast.AccountDirective{Account: ast.Account{Name: "expenses:food"}},
 			ast.DefaultCommodityDirective{Symbol: "USD"},
 		}
-		assert.Equal(t, "USD", defaultCommodityInfo(directives).symbol)
-	})
-
-	t.Run("suffix format sets CommodityRight", func(t *testing.T) {
-		directives := []ast.Directive{
-			ast.DefaultCommodityDirective{Symbol: "EUR", Format: "1.000,00 EUR"},
-		}
-		info := defaultCommodityInfo(directives)
-		assert.Equal(t, "EUR", info.symbol)
-		assert.Equal(t, ast.CommodityRight, info.position)
-	})
-
-	t.Run("prefix format sets CommodityLeft", func(t *testing.T) {
-		directives := []ast.Directive{
-			ast.DefaultCommodityDirective{Symbol: "$", Format: "$1,000.00"},
-		}
-		info := defaultCommodityInfo(directives)
-		assert.Equal(t, "$", info.symbol)
-		assert.Equal(t, ast.CommodityLeft, info.position)
+		assert.Equal(t, "USD", defaultCommoditySymbol(directives))
 	})
 }
 
@@ -764,7 +746,7 @@ func TestHover_AmountWithDefaultCommodity(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	assert.Contains(t, result.Contents.Value, "1000 EUR")
+	assert.Contains(t, result.Contents.Value, "1.000,00 EUR")
 }
 
 func TestHover_AmountWithDefaultCommodityPrefix(t *testing.T) {
@@ -790,7 +772,7 @@ func TestHover_AmountWithDefaultCommodityPrefix(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	assert.Contains(t, result.Contents.Value, "$1000")
+	assert.Contains(t, result.Contents.Value, "$1,000.00")
 }
 
 func TestHover_AmountWithDefaultCommodity_ExplicitOverrides(t *testing.T) {
@@ -816,6 +798,82 @@ func TestHover_AmountWithDefaultCommodity_ExplicitOverrides(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	assert.Contains(t, result.Contents.Value, "$50")
+	assert.Contains(t, result.Contents.Value, "$50.00")
 	assert.NotContains(t, result.Contents.Value, "EUR")
+}
+
+func TestHover_AmountWithCommodityDirective(t *testing.T) {
+	srv := NewServer()
+	content := `commodity 1.000,00 RUB
+
+2024-01-15 test
+    expenses:food  10000 RUB
+    assets:cash`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 3, Character: 19},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Contains(t, result.Contents.Value, "10.000,00 RUB")
+}
+
+func TestHover_AmountNoDirectivesFallback(t *testing.T) {
+	srv := NewServer()
+	content := `2024-01-15 test
+    expenses:food  50.00 EUR
+    assets:cash`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 1, Character: 19},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Contains(t, result.Contents.Value, "50.00 EUR")
+}
+
+func TestHover_CostFormattedWithCommodityDirective(t *testing.T) {
+	srv := NewServer()
+	content := `commodity 1.000,00 EUR
+
+2024-01-15 buy stocks
+    assets:stocks  10 AAPL @ 15000 EUR
+    assets:cash`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 3, Character: 20},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Contains(t, result.Contents.Value, "15.000,00 EUR")
 }

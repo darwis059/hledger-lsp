@@ -993,6 +993,48 @@ func TestFormatDocument_CommodityPositionFromFormatDirective(t *testing.T) {
 		"should not have commodity glued to number without space")
 }
 
+func TestExtractCommodityFormats(t *testing.T) {
+	t.Run("commodity directive", func(t *testing.T) {
+		directives := []ast.Directive{
+			ast.CommodityDirective{
+				Commodity: ast.Commodity{Symbol: "RUB"},
+				Format:    "1.000,00 RUB",
+			},
+		}
+		formats := ExtractCommodityFormats(directives)
+		require.Contains(t, formats, "RUB")
+		assert.Equal(t, ',', formats["RUB"].DecimalMark)
+		assert.Equal(t, ".", formats["RUB"].ThousandsSep)
+		assert.Equal(t, ast.CommodityRight, formats["RUB"].Position)
+		assert.True(t, formats["RUB"].SpaceBetween)
+	})
+
+	t.Run("default commodity directive", func(t *testing.T) {
+		directives := []ast.Directive{
+			ast.DefaultCommodityDirective{Symbol: "EUR", Format: "1.000,00 EUR"},
+		}
+		formats := ExtractCommodityFormats(directives)
+		require.Contains(t, formats, "EUR")
+		require.Contains(t, formats, "")
+		assert.Equal(t, ',', formats[""].DecimalMark)
+	})
+
+	t.Run("nil directives returns empty map", func(t *testing.T) {
+		formats := ExtractCommodityFormats(nil)
+		assert.Empty(t, formats)
+	})
+
+	t.Run("last default wins", func(t *testing.T) {
+		directives := []ast.Directive{
+			ast.DefaultCommodityDirective{Symbol: "EUR", Format: "1.000,00 EUR"},
+			ast.DefaultCommodityDirective{Symbol: "$", Format: "$1,000.00"},
+		}
+		formats := ExtractCommodityFormats(directives)
+		assert.Equal(t, '.', formats[""].DecimalMark)
+		assert.Equal(t, ",", formats[""].ThousandsSep)
+	})
+}
+
 func TestFormatDocument_PrefixCommodityAfterBareNumber(t *testing.T) {
 	input := "2024-01-15 test\n    Расходы:Продукты  698,43\n    Активы:Альфа  RUB100,00\n    Активы:Бета  RUB11,00"
 

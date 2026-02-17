@@ -483,32 +483,8 @@ func (w *Workspace) GetCommodityFormats() map[string]formatter.CommodityFormat {
 		return nil
 	}
 
-	formats := make(map[string]formatter.CommodityFormat)
-	var defaultFormat *formatter.CommodityFormat
-
-	for _, dir := range w.resolved.AllDirectives() {
-		switch d := dir.(type) {
-		case ast.CommodityDirective:
-			if d.Format != "" {
-				formats[d.Commodity.Symbol] = formatter.ParseCommodityFormat(d.Format, d.Commodity.Symbol)
-			}
-		case ast.DefaultCommodityDirective:
-			if d.Format != "" {
-				cf := formatter.ParseCommodityFormat(d.Format, d.Symbol)
-				defaultFormat = &cf
-				if d.Symbol != "" {
-					formats[d.Symbol] = cf
-				}
-			}
-		}
-	}
-
-	if defaultFormat != nil {
-		formats[""] = *defaultFormat
-	}
-
-	w.cachedFormats = formats
-	return formats
+	w.cachedFormats = formatter.ExtractCommodityFormats(w.resolved.AllDirectives())
+	return w.cachedFormats
 }
 
 func (w *Workspace) GetDeclaredCommodities() map[string]bool {

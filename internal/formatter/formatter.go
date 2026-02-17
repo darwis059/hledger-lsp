@@ -114,11 +114,11 @@ func trimTrailingSpacesEdits(content string, mapper *lsputil.PositionMapper, pos
 	return edits
 }
 
-func extractCommodityFormats(journal *ast.Journal) map[string]CommodityFormat {
+func ExtractCommodityFormats(directives []ast.Directive) map[string]CommodityFormat {
 	formats := make(map[string]CommodityFormat)
 	var defaultFormat *CommodityFormat
 
-	for _, dir := range journal.Directives {
+	for _, dir := range directives {
 		switch d := dir.(type) {
 		case ast.CommodityDirective:
 			if d.Format != "" {
@@ -140,6 +140,10 @@ func extractCommodityFormats(journal *ast.Journal) map[string]CommodityFormat {
 	}
 
 	return formats
+}
+
+func extractCommodityFormats(journal *ast.Journal) map[string]CommodityFormat {
+	return ExtractCommodityFormats(journal.Directives)
 }
 
 func formatTransactionWithOpts(tx *ast.Transaction, mapper *lsputil.PositionMapper, commodityFormats map[string]CommodityFormat, globalAccountCol int, opts Options) []protocol.TextEdit {
