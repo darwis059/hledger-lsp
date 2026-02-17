@@ -2172,6 +2172,54 @@ func TestParser_WhitespaceOnlyLineAtJournalLevel(t *testing.T) {
 	})
 }
 
+func TestParser_TagValueDoubleSpaceTermination(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantName  string
+		wantValue string
+	}{
+		{
+			name:      "tag value stops at double space",
+			input:     "2024-01-15 test  ; tag:value  extra text\n    expenses:food  $50\n    assets:cash",
+			wantName:  "tag",
+			wantValue: "value",
+		},
+		{
+			name:      "tag value without double space includes all",
+			input:     "2024-01-15 test  ; tag:value\n    expenses:food  $50\n    assets:cash",
+			wantName:  "tag",
+			wantValue: "value",
+		},
+		{
+			name:      "tag value stops at double space in posting comment",
+			input:     "2024-01-15 test\n    expenses:food  $50  ; category:meals  reimbursable\n    assets:cash",
+			wantName:  "category",
+			wantValue: "meals",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			journal, errs := Parse(tt.input)
+			require.Empty(t, errs)
+			require.Len(t, journal.Transactions, 1)
+
+			tx := journal.Transactions[0]
+			var tags []ast.Tag
+			if len(tx.Comments) > 0 && len(tx.Comments[0].Tags) > 0 {
+				tags = tx.Comments[0].Tags
+			} else if len(tx.Postings) > 0 && len(tx.Postings[0].Tags) > 0 {
+				tags = tx.Postings[0].Tags
+			}
+
+			require.NotEmpty(t, tags, "expected at least one tag")
+			assert.Equal(t, tt.wantName, tags[0].Name)
+			assert.Equal(t, tt.wantValue, tags[0].Value)
+		})
+	}
+}
+
 func TestParser_TransactionCodeWithColon(t *testing.T) {
 	t.Run("code with colon and status", func(t *testing.T) {
 		input := "2024-01-15 * (test:123) grocery store\n    expenses:food  $50\n    assets:cash\n"

@@ -1177,7 +1177,11 @@ func parseTags(text string, basePos Position) []ast.Tag {
 
 		value := ""
 		if colonIdx+1 < len(trimmed) {
-			value = strings.TrimSpace(trimmed[colonIdx+1:])
+			rawValue := strings.TrimLeft(trimmed[colonIdx+1:], " \t")
+			if idx := strings.Index(rawValue, "  "); idx != -1 {
+				rawValue = rawValue[:idx]
+			}
+			value = strings.TrimSpace(rawValue)
 		}
 
 		tagStart := strings.Index(text[searchStart:], name+":")

@@ -728,3 +728,82 @@ func TestSemanticTokens_CyrillicTagPositions(t *testing.T) {
 		})
 	}
 }
+
+func TestSemanticTokens_TagValueDoubleSpaceTermination(t *testing.T) {
+	tests := []struct {
+		name          string
+		content       string
+		wantPositions []struct {
+			tokenType uint32
+			col       uint32
+			length    uint32
+		}
+	}{
+		{
+			name:    "cyrillic tag with double space before amount",
+			content: ";  Расходы:Транспорт  71,00",
+			// "Расходы:" at col 3, length 8 (7 Cyrillic + colon)
+			// value "Транспорт" at col 11, length 9
+			// "71,00" should NOT be highlighted
+			wantPositions: []struct {
+				tokenType uint32
+				col       uint32
+				length    uint32
+			}{
+				{tokenType: TokenTypeTag, col: 3, length: 8},
+				{tokenType: TokenTypeTagValue, col: 11, length: 9},
+			},
+		},
+		{
+			name:    "ascii tag value stops at double space",
+			content: "; tag:value  extra",
+			// "tag:" at col 2, length 4
+			// value "value" at col 6, length 5
+			// "extra" should NOT be highlighted
+			wantPositions: []struct {
+				tokenType uint32
+				col       uint32
+				length    uint32
+			}{
+				{tokenType: TokenTypeTag, col: 2, length: 4},
+				{tokenType: TokenTypeTagValue, col: 6, length: 5},
+			},
+		},
+		{
+			name:    "tag value without double space unchanged",
+			content: "; tag:value",
+			// "tag:" at col 2, length 4
+			// value "value" at col 6, length 5
+			wantPositions: []struct {
+				tokenType uint32
+				col       uint32
+				length    uint32
+			}{
+				{tokenType: TokenTypeTag, col: 2, length: 4},
+				{tokenType: TokenTypeTagValue, col: 6, length: 5},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeForSemantics(tt.content)
+			require.NotEmpty(t, tokens, "expected tokens")
+
+			var tagRelatedTokens []semanticToken
+			for _, tok := range tokens {
+				if tok.tokenType == TokenTypeTag || tok.tokenType == TokenTypeTagValue {
+					tagRelatedTokens = append(tagRelatedTokens, tok)
+				}
+			}
+
+			require.Len(t, tagRelatedTokens, len(tt.wantPositions), "token count mismatch")
+
+			for i, want := range tt.wantPositions {
+				assert.Equal(t, want.tokenType, tagRelatedTokens[i].tokenType, "token %d type", i)
+				assert.Equal(t, want.col, tagRelatedTokens[i].col, "token %d col", i)
+				assert.Equal(t, want.length, tagRelatedTokens[i].length, "token %d length", i)
+			}
+		})
+	}
+}
