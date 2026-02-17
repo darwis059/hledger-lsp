@@ -77,6 +77,7 @@ func (p *Parser) parseJournal() *ast.Journal {
 				}
 			}
 		case TokenIndent:
+			// Whitespace-only lines: consume indent, newline handled by next iteration
 			p.advance()
 			if p.current.Type != TokenNewline && p.current.Type != TokenEOF {
 				p.error("unexpected content: %s", p.current.Value)
@@ -132,14 +133,7 @@ func (p *Parser) parseTransaction() *ast.Transaction {
 
 		if p.current.Type == TokenPipe {
 			tx.Payee = strings.TrimSpace(desc)
-			tx.DescriptionRange = ast.Range{
-				Start: toASTPosition(descPos),
-				End: ast.Position{
-					Line:   descPos.Line,
-					Column: descPos.Column + utf8.RuneCountInString(tx.Payee),
-					Offset: descPos.Offset + len(tx.Payee),
-				},
-			}
+			tx.DescriptionRange = descRange(descPos, tx.Payee)
 			p.advance()
 			if p.current.Type == TokenText {
 				tx.Note = strings.TrimSpace(p.current.Value)
@@ -151,14 +145,7 @@ func (p *Parser) parseTransaction() *ast.Transaction {
 			}
 		} else {
 			tx.Description = desc
-			tx.DescriptionRange = ast.Range{
-				Start: toASTPosition(descPos),
-				End: ast.Position{
-					Line:   descPos.Line,
-					Column: descPos.Column + utf8.RuneCountInString(desc),
-					Offset: descPos.Offset + len(desc),
-				},
-			}
+			tx.DescriptionRange = descRange(descPos, desc)
 		}
 	}
 
@@ -222,14 +209,7 @@ func (p *Parser) parsePeriodicTransaction() *ast.PeriodicTransaction {
 
 		if p.current.Type == TokenPipe {
 			ptx.Payee = strings.TrimSpace(desc)
-			ptx.DescriptionRange = ast.Range{
-				Start: toASTPosition(descPos),
-				End: ast.Position{
-					Line:   descPos.Line,
-					Column: descPos.Column + utf8.RuneCountInString(ptx.Payee),
-					Offset: descPos.Offset + len(ptx.Payee),
-				},
-			}
+			ptx.DescriptionRange = descRange(descPos, ptx.Payee)
 			p.advance()
 			if p.current.Type == TokenText {
 				ptx.Note = strings.TrimSpace(p.current.Value)
@@ -241,14 +221,7 @@ func (p *Parser) parsePeriodicTransaction() *ast.PeriodicTransaction {
 			}
 		} else {
 			ptx.Description = desc
-			ptx.DescriptionRange = ast.Range{
-				Start: toASTPosition(descPos),
-				End: ast.Position{
-					Line:   descPos.Line,
-					Column: descPos.Column + utf8.RuneCountInString(desc),
-					Offset: descPos.Offset + len(desc),
-				},
-			}
+			ptx.DescriptionRange = descRange(descPos, desc)
 		}
 	}
 
@@ -1282,6 +1255,17 @@ func (p *Parser) errorAt(pos, end Position, format string, args ...any) {
 		Pos:     pos,
 		End:     end,
 	})
+}
+
+func descRange(pos Position, text string) ast.Range {
+	return ast.Range{
+		Start: toASTPosition(pos),
+		End: ast.Position{
+			Line:   pos.Line,
+			Column: pos.Column + utf8.RuneCountInString(text),
+			Offset: pos.Offset + len(text),
+		},
+	}
 }
 
 func toASTPosition(pos Position) ast.Position {

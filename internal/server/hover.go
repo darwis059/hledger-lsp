@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"go.lsp.dev/protocol"
 
@@ -176,14 +177,14 @@ func getPayeeOrDescription(tx *ast.Transaction) string {
 }
 
 func payeeRange(tx *ast.Transaction, payee string) ast.Range {
-	if tx.DescriptionRange.Start.Line > 0 {
+	if tx.DescriptionRange != (ast.Range{}) {
 		return tx.DescriptionRange
 	}
 	startCol := tx.Date.Range.End.Column + 1
 	if tx.Status != ast.StatusNone {
 		startCol += 2
 	}
-	payeeLen := lsputil.UTF16Len(payee)
+	payeeLen := utf8.RuneCountInString(payee)
 	return ast.Range{
 		Start: ast.Position{
 			Line:   tx.Date.Range.Start.Line,
