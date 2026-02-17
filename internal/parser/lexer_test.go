@@ -1919,6 +1919,17 @@ func TestLexer_PermissiveAccountNames(t *testing.T) {
 			},
 		},
 		{
+			name:  "single space before semicolon includes it in account",
+			input: "    expenses:food ;not-a-comment  50 EUR",
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "expenses:food ;not-a-comment"},
+				{Type: TokenNumber, Value: "50"},
+				{Type: TokenCommodity, Value: "EUR"},
+				{Type: TokenEOF},
+			},
+		},
+		{
 			name:  "complex special chars from issue",
 			input: "    Expenses:Some account (~`@#$%^&*_-+={}[]|,.<>?/\"'\\)  100 USD",
 			want: []Token{

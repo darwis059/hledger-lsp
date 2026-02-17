@@ -2317,6 +2317,15 @@ func TestParser_PermissiveAccountNames(t *testing.T) {
 			wantAmount:  "50",
 			wantComm:    "EUR",
 		},
+		{
+			name: "account with at-sign and cost annotation",
+			input: `2024-01-15 test
+    expenses:cafe@home  50 EUR @ $1
+    assets:cash`,
+			wantAccount: "expenses:cafe@home",
+			wantAmount:  "50",
+			wantComm:    "EUR",
+		},
 	}
 
 	for _, tt := range tests {
@@ -2333,6 +2342,19 @@ func TestParser_PermissiveAccountNames(t *testing.T) {
 			assert.Equal(t, tt.wantComm, p.Amount.Commodity.Symbol)
 		})
 	}
+
+	t.Run("account with at-sign has correct cost", func(t *testing.T) {
+		input := "2024-01-15 test\n    expenses:cafe@home  50 EUR @ $1\n    assets:cash"
+		journal, errs := Parse(input)
+		require.Empty(t, errs, "unexpected parse errors: %v", errs)
+		require.Len(t, journal.Transactions, 1)
+
+		p := journal.Transactions[0].Postings[0]
+		require.NotNil(t, p.Cost, "cost should not be nil")
+		assert.False(t, p.Cost.IsTotal, "should be unit cost, not total")
+		assert.Equal(t, "1", p.Cost.Amount.Quantity.String())
+		assert.Equal(t, "$", p.Cost.Amount.Commodity.Symbol)
+	})
 }
 
 func TestParser_VirtualPostingsWithPermissiveNames(t *testing.T) {
