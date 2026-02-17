@@ -249,12 +249,13 @@ func buildAccountHoverWithTransactions(accountName string, balances analyzer.Acc
 }
 
 func defaultCommoditySymbol(directives []ast.Directive) string {
+	var symbol string
 	for _, dir := range directives {
 		if d, ok := dir.(ast.DefaultCommodityDirective); ok {
-			return d.Symbol
+			symbol = d.Symbol
 		}
 	}
-	return ""
+	return symbol
 }
 
 func buildAmountHover(amount *ast.Amount, cost *ast.Cost, defaultCommodity string) string {
@@ -265,7 +266,11 @@ func buildAmountHover(amount *ast.Amount, cost *ast.Cost, defaultCommodity strin
 		commodity = defaultCommodity
 	}
 
-	fmt.Fprintf(&sb, "**Amount:** %s %s", amount.Quantity.String(), commodity)
+	if commodity != "" {
+		fmt.Fprintf(&sb, "**Amount:** %s %s", amount.Quantity.String(), commodity)
+	} else {
+		fmt.Fprintf(&sb, "**Amount:** %s", amount.Quantity.String())
+	}
 
 	if cost != nil {
 		if cost.IsTotal {

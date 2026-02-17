@@ -686,6 +686,15 @@ func TestDefaultCommoditySymbol(t *testing.T) {
 	t.Run("returns empty string for nil directives", func(t *testing.T) {
 		assert.Equal(t, "", defaultCommoditySymbol(nil))
 	})
+
+	t.Run("returns last directive when multiple exist", func(t *testing.T) {
+		directives := []ast.Directive{
+			ast.DefaultCommodityDirective{Symbol: "EUR"},
+			ast.AccountDirective{Account: ast.Account{Name: "expenses:food"}},
+			ast.DefaultCommodityDirective{Symbol: "USD"},
+		}
+		assert.Equal(t, "USD", defaultCommoditySymbol(directives))
+	})
 }
 
 func TestHover_AmountWithDefaultCommodity(t *testing.T) {
