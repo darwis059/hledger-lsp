@@ -545,6 +545,46 @@ func TestParser_Comment(t *testing.T) {
 	require.Len(t, journal.Transactions, 1)
 }
 
+func TestParser_HashComment(t *testing.T) {
+	t.Run("top-level hash comment before transaction", func(t *testing.T) {
+		input := `# This is a hash comment
+2024-01-15 test
+    expenses:misc  $10
+    assets:cash`
+
+		journal, errs := Parse(input)
+		require.Empty(t, errs)
+		require.Len(t, journal.Comments, 1)
+		assert.Equal(t, " This is a hash comment", journal.Comments[0].Text)
+		require.Len(t, journal.Transactions, 1)
+	})
+
+	t.Run("indented hash comment inside transaction", func(t *testing.T) {
+		input := `2024-01-15 test
+    # posting comment
+    expenses:misc  $10
+    assets:cash`
+
+		journal, errs := Parse(input)
+		require.Empty(t, errs)
+		require.Len(t, journal.Transactions, 1)
+		require.Len(t, journal.Transactions[0].Postings, 2)
+	})
+
+	t.Run("multiple hash comments", func(t *testing.T) {
+		input := `# comment 1
+# comment 2
+2024-01-15 test
+    expenses:misc  $10
+    assets:cash`
+
+		journal, errs := Parse(input)
+		require.Empty(t, errs)
+		require.Len(t, journal.Comments, 2)
+		require.Len(t, journal.Transactions, 1)
+	})
+}
+
 func TestParser_NegativeAmount(t *testing.T) {
 	input := `2024-01-15 withdrawal
     assets:cash  $-50

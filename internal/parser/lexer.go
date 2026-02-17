@@ -51,7 +51,7 @@ func (l *Lexer) Next() Token {
 func (l *Lexer) scanLineStart() Token {
 	l.atStart = false
 
-	if l.peek() == ';' {
+	if l.peek() == ';' || l.peek() == '#' {
 		return l.scanComment()
 	}
 
@@ -94,6 +94,8 @@ func (l *Lexer) scanInLine() Token {
 	case ch == '\n':
 		return l.scanNewline()
 	case ch == ';':
+		return l.scanComment()
+	case ch == '#' && l.afterIndent:
 		return l.scanComment()
 	case ch == '(':
 		if l.looksLikeVirtualAccount() {

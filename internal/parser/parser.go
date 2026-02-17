@@ -75,7 +75,11 @@ func (p *Parser) parseJournal() *ast.Journal {
 				}
 			}
 		default:
-			p.error("unexpected token: %s", p.current.Type)
+			if p.current.Value != "" {
+				p.error("unexpected content: %s", p.current.Value)
+			} else {
+				p.error("unexpected content")
+			}
 			p.skipToNextLine()
 		}
 	}

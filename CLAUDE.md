@@ -84,3 +84,4 @@ This ensures continuity between sessions and clear visibility of what's done and
 - Target 80%+ test coverage for parser
 - Decimal arithmetic via `shopspring/decimal`
 - LSP protocol via `go.lsp.dev/protocol` and `go.lsp.dev/jsonrpc2`
+- All user-visible error messages (parser errors, analyzer diagnostics, loader errors) must be human-readable. Do not expose internal token type names, AST node types, or other implementation details in error messages.

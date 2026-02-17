@@ -149,6 +149,35 @@ func TestLexer_Comment(t *testing.T) {
 				{Type: TokenEOF},
 			},
 		},
+		{
+			name:  "hash line comment",
+			input: "# this is a comment",
+			want: []Token{
+				{Type: TokenComment, Value: " this is a comment"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "hash indented comment",
+			input: "2024-01-15 test\n    # comment",
+			want: []Token{
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenText, Value: "test"},
+				{Type: TokenNewline},
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenComment, Value: " comment"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "hash is not inline comment",
+			input: "2024-01-15 test # not a comment",
+			want: []Token{
+				{Type: TokenDate, Value: "2024-01-15"},
+				{Type: TokenText, Value: "test # not a comment"},
+				{Type: TokenEOF},
+			},
+		},
 	}
 
 	for _, tt := range tests {
