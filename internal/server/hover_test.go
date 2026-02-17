@@ -721,6 +721,24 @@ func TestDefaultCommodityInfo(t *testing.T) {
 		}
 		assert.Equal(t, "USD", defaultCommodityInfo(directives).symbol)
 	})
+
+	t.Run("suffix format sets CommodityRight", func(t *testing.T) {
+		directives := []ast.Directive{
+			ast.DefaultCommodityDirective{Symbol: "EUR", Format: "1.000,00 EUR"},
+		}
+		info := defaultCommodityInfo(directives)
+		assert.Equal(t, "EUR", info.symbol)
+		assert.Equal(t, ast.CommodityRight, info.position)
+	})
+
+	t.Run("prefix format sets CommodityLeft", func(t *testing.T) {
+		directives := []ast.Directive{
+			ast.DefaultCommodityDirective{Symbol: "$", Format: "$1,000.00"},
+		}
+		info := defaultCommodityInfo(directives)
+		assert.Equal(t, "$", info.symbol)
+		assert.Equal(t, ast.CommodityLeft, info.position)
+	})
 }
 
 func TestHover_AmountWithDefaultCommodity(t *testing.T) {
