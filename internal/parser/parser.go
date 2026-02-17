@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/shopspring/decimal"
 
@@ -126,10 +127,19 @@ func (p *Parser) parseTransaction() *ast.Transaction {
 
 	if p.current.Type == TokenText {
 		desc := p.current.Value
+		descPos := p.current.Pos
 		p.advance()
 
 		if p.current.Type == TokenPipe {
 			tx.Payee = strings.TrimSpace(desc)
+			tx.DescriptionRange = ast.Range{
+				Start: toASTPosition(descPos),
+				End: ast.Position{
+					Line:   descPos.Line,
+					Column: descPos.Column + utf8.RuneCountInString(tx.Payee),
+					Offset: descPos.Offset + len(tx.Payee),
+				},
+			}
 			p.advance()
 			if p.current.Type == TokenText {
 				tx.Note = strings.TrimSpace(p.current.Value)
@@ -141,6 +151,14 @@ func (p *Parser) parseTransaction() *ast.Transaction {
 			}
 		} else {
 			tx.Description = desc
+			tx.DescriptionRange = ast.Range{
+				Start: toASTPosition(descPos),
+				End: ast.Position{
+					Line:   descPos.Line,
+					Column: descPos.Column + utf8.RuneCountInString(desc),
+					Offset: descPos.Offset + len(desc),
+				},
+			}
 		}
 	}
 
@@ -199,10 +217,19 @@ func (p *Parser) parsePeriodicTransaction() *ast.PeriodicTransaction {
 	// Parse optional description
 	if p.current.Type == TokenText {
 		desc := p.current.Value
+		descPos := p.current.Pos
 		p.advance()
 
 		if p.current.Type == TokenPipe {
 			ptx.Payee = strings.TrimSpace(desc)
+			ptx.DescriptionRange = ast.Range{
+				Start: toASTPosition(descPos),
+				End: ast.Position{
+					Line:   descPos.Line,
+					Column: descPos.Column + utf8.RuneCountInString(ptx.Payee),
+					Offset: descPos.Offset + len(ptx.Payee),
+				},
+			}
 			p.advance()
 			if p.current.Type == TokenText {
 				ptx.Note = strings.TrimSpace(p.current.Value)
@@ -214,6 +241,14 @@ func (p *Parser) parsePeriodicTransaction() *ast.PeriodicTransaction {
 			}
 		} else {
 			ptx.Description = desc
+			ptx.DescriptionRange = ast.Range{
+				Start: toASTPosition(descPos),
+				End: ast.Position{
+					Line:   descPos.Line,
+					Column: descPos.Column + utf8.RuneCountInString(desc),
+					Offset: descPos.Offset + len(desc),
+				},
+			}
 		}
 	}
 

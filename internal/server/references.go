@@ -131,7 +131,7 @@ func findPayeeReferences(payee string, resolved *include.ResolvedJournal, curren
 			if txPayee == payee {
 				locations = append(locations, protocol.Location{
 					URI:   pathToURI(filePath),
-					Range: *astRangeToProtocol(estimatePayeeRange(tx, payee)),
+					Range: *astRangeToProtocol(payeeRange(tx, payee)),
 				})
 			}
 		}

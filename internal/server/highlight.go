@@ -104,7 +104,7 @@ func findPayeeHighlights(journal *ast.Journal, payee string) []protocol.Document
 		txPayee := getPayeeOrDescription(tx)
 		if txPayee == payee {
 			highlights = append(highlights, protocol.DocumentHighlight{
-				Range: *astRangeToProtocol(estimatePayeeRange(tx, payee)),
+				Range: *astRangeToProtocol(payeeRange(tx, payee)),
 				Kind:  protocol.DocumentHighlightKindRead,
 			})
 		}

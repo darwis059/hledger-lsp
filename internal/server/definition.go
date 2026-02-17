@@ -90,7 +90,7 @@ func findDefinitionTarget(journal *ast.Journal, pos protocol.Position) *definiti
 
 		payee := getPayeeOrDescription(tx)
 		if payee != "" {
-			payeeRange := estimatePayeeRange(tx, payee)
+			payeeRange := payeeRange(tx, payee)
 			if positionInRange(pos, payeeRange) {
 				return &definitionTarget{
 					context:     DefContextPayee,

@@ -111,7 +111,7 @@ func findElementAtPosition(journal *ast.Journal, pos protocol.Position) *hoverEl
 
 		payee := getPayeeOrDescription(tx)
 		if payee != "" {
-			payeeRange := estimatePayeeRange(tx, payee)
+			payeeRange := payeeRange(tx, payee)
 			if positionInRange(pos, payeeRange) {
 				return &hoverElement{
 					context:     HoverPayee,
@@ -175,12 +175,14 @@ func getPayeeOrDescription(tx *ast.Transaction) string {
 	return tx.Description
 }
 
-func estimatePayeeRange(tx *ast.Transaction, payee string) ast.Range {
+func payeeRange(tx *ast.Transaction, payee string) ast.Range {
+	if tx.DescriptionRange.Start.Line > 0 {
+		return tx.DescriptionRange
+	}
 	startCol := tx.Date.Range.End.Column + 1
 	if tx.Status != ast.StatusNone {
 		startCol += 2
 	}
-
 	payeeLen := lsputil.UTF16Len(payee)
 	return ast.Range{
 		Start: ast.Position{

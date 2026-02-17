@@ -59,7 +59,7 @@ func buildSelectionRange(journal *ast.Journal, pos protocol.Position, docRange p
 
 		payee := getPayeeOrDescription(tx)
 		if payee != "" {
-			payeeRange := *astRangeToProtocol(estimatePayeeRange(tx, payee))
+			payeeRange := *astRangeToProtocol(payeeRange(tx, payee))
 			if rangeContainsPosition(payeeRange, pos) {
 				return protocol.SelectionRange{Range: payeeRange, Parent: &txSel}
 			}

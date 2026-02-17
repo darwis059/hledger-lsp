@@ -81,6 +81,70 @@ func TestParser_TransactionWithCode(t *testing.T) {
 	assert.Equal(t, "12345", journal.Transactions[0].Code)
 }
 
+func TestParser_DescriptionRange(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		wantDescRange ast.Range
+		wantPayee     string
+		wantDesc      string
+	}{
+		{
+			name:     "simple description without code",
+			input:    "2024-01-15 grocery store\n    expenses:food  $50\n    assets:cash",
+			wantDesc: "grocery store",
+			wantDescRange: ast.Range{
+				Start: ast.Position{Line: 1, Column: 12, Offset: 11},
+				End:   ast.Position{Line: 1, Column: 25, Offset: 24},
+			},
+		},
+		{
+			name:     "description with code",
+			input:    "2024-01-15 (test:123) grocery store\n    expenses:food  $50\n    assets:cash",
+			wantDesc: "grocery store",
+			wantDescRange: ast.Range{
+				Start: ast.Position{Line: 1, Column: 23, Offset: 22},
+				End:   ast.Position{Line: 1, Column: 36, Offset: 35},
+			},
+		},
+		{
+			name:     "description with status and code",
+			input:    "2024-01-15 * (test:123) grocery store\n    expenses:food  $50\n    assets:cash",
+			wantDesc: "grocery store",
+			wantDescRange: ast.Range{
+				Start: ast.Position{Line: 1, Column: 25, Offset: 24},
+				End:   ast.Position{Line: 1, Column: 38, Offset: 37},
+			},
+		},
+		{
+			name:      "payee with pipe",
+			input:     "2024-01-15 Grocery Store | weekly shopping\n    expenses:food  $50\n    assets:cash",
+			wantPayee: "Grocery Store",
+			wantDescRange: ast.Range{
+				Start: ast.Position{Line: 1, Column: 12, Offset: 11},
+				End:   ast.Position{Line: 1, Column: 25, Offset: 24},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			journal, errs := Parse(tt.input)
+			require.Empty(t, errs)
+			require.Len(t, journal.Transactions, 1)
+
+			tx := journal.Transactions[0]
+			if tt.wantPayee != "" {
+				assert.Equal(t, tt.wantPayee, tx.Payee)
+			}
+			if tt.wantDesc != "" {
+				assert.Equal(t, tt.wantDesc, tx.Description)
+			}
+			assert.Equal(t, tt.wantDescRange, tx.DescriptionRange, "DescriptionRange mismatch")
+		})
+	}
+}
+
 func TestParser_TransactionWithPayeeAndNote(t *testing.T) {
 	input := `2024-01-15 Grocery Store | weekly shopping
     expenses:food  $50

@@ -73,7 +73,7 @@ func extractSymbols(journal *ast.Journal, uri protocol.DocumentURI, query string
 					Kind: protocol.SymbolKindFunction,
 					Location: protocol.Location{
 						URI:   uri,
-						Range: *astRangeToProtocol(estimatePayeeRange(tx, payee)),
+						Range: *astRangeToProtocol(payeeRange(tx, payee)),
 					},
 				})
 			}

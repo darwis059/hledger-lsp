@@ -493,6 +493,89 @@ func TestHover_TagValueWithUnicodeContent(t *testing.T) {
 	assert.Contains(t, result.Contents.Value, "2") // usage count for project:дом
 }
 
+func TestHover_PayeeWithCode(t *testing.T) {
+	srv := NewServer()
+	content := `2026-01-01 (test:123) test
+    expenses:food  $50
+    assets:cash
+
+2026-01-02 test
+    expenses:food  $30
+    assets:cash`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	// Hover on payee "test" after code (test:123)
+	// "2026-01-01 (test:123) test" — "test" starts at column 22 (0-indexed)
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 0, Character: 23},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result, "hover on payee after code should return result")
+
+	assert.Contains(t, result.Contents.Value, "Payee")
+	assert.Contains(t, result.Contents.Value, "test")
+	assert.Contains(t, result.Contents.Value, "2")
+}
+
+func TestHover_InsideCodeParentheses(t *testing.T) {
+	srv := NewServer()
+	content := `2026-01-01 (test:123) test
+    expenses:food  $50
+    assets:cash`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	// Hover inside code parentheses "(test:123)" — should NOT return payee
+	// Column 14 (0-indexed) is inside "test:123"
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 0, Character: 14},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	assert.Nil(t, result, "hover inside code parentheses should NOT return payee hover")
+}
+
+func TestHover_PayeeWithStatusAndCode(t *testing.T) {
+	srv := NewServer()
+	content := `2026-01-01 * (test:123) grocery store
+    expenses:food  $50
+    assets:cash`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	// Hover on payee "grocery store" after status and code
+	// "2026-01-01 * (test:123) grocery store" — "grocery" starts at column 24 (0-indexed)
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 0, Character: 27},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result, "hover on payee after status+code should return result")
+
+	assert.Contains(t, result.Contents.Value, "Payee")
+	assert.Contains(t, result.Contents.Value, "grocery store")
+}
+
 func TestHover_PartialDateWithComment(t *testing.T) {
 	srv := NewServer()
 	// Y 2024 directive sets default year for partial dates

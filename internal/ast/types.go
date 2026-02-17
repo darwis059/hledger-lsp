@@ -23,30 +23,32 @@ type Journal struct {
 }
 
 type Transaction struct {
-	Date        Date
-	Date2       *Date
-	Status      Status
-	Code        string
-	Description string
-	Payee       string
-	Note        string
-	Postings    []Posting
-	Tags        []Tag
-	Comments    []Comment
-	Range       Range
+	Date             Date
+	Date2            *Date
+	Status           Status
+	Code             string
+	Description      string
+	DescriptionRange Range
+	Payee            string
+	Note             string
+	Postings         []Posting
+	Tags             []Tag
+	Comments         []Comment
+	Range            Range
 }
 
 type PeriodicTransaction struct {
-	Period      string
-	Status      Status
-	Code        string
-	Description string
-	Payee       string
-	Note        string
-	Postings    []Posting
-	Tags        []Tag
-	Comments    []Comment
-	Range       Range
+	Period           string
+	Status           Status
+	Code             string
+	Description      string
+	DescriptionRange Range
+	Payee            string
+	Note             string
+	Postings         []Posting
+	Tags             []Tag
+	Comments         []Comment
+	Range            Range
 }
 
 type AutoPostingRule struct {
