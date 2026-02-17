@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.lsp.dev/protocol"
@@ -1033,6 +1034,103 @@ func TestExtractCommodityFormats(t *testing.T) {
 		assert.Equal(t, '.', formats[""].DecimalMark)
 		assert.Equal(t, ",", formats[""].ThousandsSep)
 	})
+}
+
+func TestFormatBalance(t *testing.T) {
+	tests := []struct {
+		name             string
+		quantity         string
+		commodity        string
+		commodityFormats map[string]CommodityFormat
+		expected         string
+	}{
+		{
+			name:             "basic quantity and symbol without format map",
+			quantity:         "50",
+			commodity:        "USD",
+			commodityFormats: nil,
+			expected:         "50 USD",
+		},
+		{
+			name:      "left position commodity format",
+			quantity:  "50",
+			commodity: "$",
+			commodityFormats: map[string]CommodityFormat{
+				"$": {
+					NumberFormat: NumberFormat{DecimalMark: '.', DecimalPlaces: 2, HasDecimal: true, ThousandsSep: ","},
+					Position:     ast.CommodityLeft,
+					SpaceBetween: false,
+				},
+			},
+			expected: "$50.00",
+		},
+		{
+			name:      "right position commodity with space",
+			quantity:  "1000",
+			commodity: "EUR",
+			commodityFormats: map[string]CommodityFormat{
+				"EUR": {
+					NumberFormat: NumberFormat{DecimalMark: ',', DecimalPlaces: 2, HasDecimal: true, ThousandsSep: "."},
+					Position:     ast.CommodityRight,
+					SpaceBetween: true,
+				},
+			},
+			expected: "1.000,00 EUR",
+		},
+		{
+			name:      "default commodity format via empty key",
+			quantity:  "80",
+			commodity: "$",
+			commodityFormats: map[string]CommodityFormat{
+				"": {
+					NumberFormat: NumberFormat{DecimalMark: '.', DecimalPlaces: 2, HasDecimal: true, ThousandsSep: ","},
+					Position:     ast.CommodityLeft,
+					SpaceBetween: false,
+				},
+				"$": {
+					NumberFormat: NumberFormat{DecimalMark: '.', DecimalPlaces: 2, HasDecimal: true, ThousandsSep: ","},
+					Position:     ast.CommodityLeft,
+					SpaceBetween: false,
+				},
+			},
+			expected: "$80.00",
+		},
+		{
+			name:      "negative balance",
+			quantity:  "-150",
+			commodity: "$",
+			commodityFormats: map[string]CommodityFormat{
+				"$": {
+					NumberFormat: NumberFormat{DecimalMark: '.', DecimalPlaces: 2, HasDecimal: true, ThousandsSep: ","},
+					Position:     ast.CommodityLeft,
+					SpaceBetween: false,
+				},
+			},
+			expected: "-$150.00",
+		},
+		{
+			name:      "empty commodity uses raw decimal",
+			quantity:  "100",
+			commodity: "",
+			commodityFormats: map[string]CommodityFormat{
+				"": {
+					NumberFormat: NumberFormat{DecimalMark: '.', DecimalPlaces: 2, HasDecimal: true},
+					Position:     ast.CommodityLeft,
+					SpaceBetween: false,
+				},
+			},
+			expected: "100",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			qty, err := decimal.NewFromString(tt.quantity)
+			require.NoError(t, err)
+			result := FormatBalance(qty, tt.commodity, tt.commodityFormats)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 func TestFormatDocument_PrefixCommodityAfterBareNumber(t *testing.T) {

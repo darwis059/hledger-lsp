@@ -852,6 +852,110 @@ func TestHover_AmountNoDirectivesFallback(t *testing.T) {
 	assert.Contains(t, result.Contents.Value, "50.00 EUR")
 }
 
+func TestHover_AccountBalanceWithDefaultCommodity(t *testing.T) {
+	srv := NewServer()
+	content := `D $1,000.00
+
+2024-01-15 grocery
+    expenses:food  $80
+    assets:cash`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 3, Character: 10},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Contains(t, result.Contents.Value, "$80.00")
+	assert.NotContains(t, result.Contents.Value, "80 $")
+}
+
+func TestHover_AccountBalanceWithCommodityDirective(t *testing.T) {
+	srv := NewServer()
+	content := `commodity 1.000,00 EUR
+
+2024-01-15 grocery
+    expenses:food  500 EUR
+    assets:cash`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 3, Character: 10},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Contains(t, result.Contents.Value, "500,00 EUR")
+}
+
+func TestHover_AccountBalanceWithPrefixCommodity(t *testing.T) {
+	srv := NewServer()
+	content := `2024-01-15 grocery
+    expenses:food  $80
+    assets:cash`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 1, Character: 10},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Contains(t, result.Contents.Value, "$80")
+	assert.NotContains(t, result.Contents.Value, "80 $")
+}
+
+func TestHover_AccountBalanceNegativeWithDirective(t *testing.T) {
+	srv := NewServer()
+	content := `D $1,000.00
+
+2024-01-15 refund
+    assets:cash  $80
+    expenses:food  $-80`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 10},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Contains(t, result.Contents.Value, "-$80.00")
+}
+
 func TestHover_CostFormattedWithCommodityDirective(t *testing.T) {
 	srv := NewServer()
 	content := `commodity 1.000,00 EUR

@@ -204,7 +204,7 @@ func payeeRange(tx *ast.Transaction, payee string) ast.Range {
 func buildHoverContentWithTransactions(element *hoverElement, balances analyzer.AccountBalances, transactions []ast.Transaction, directives []ast.Directive) string {
 	switch element.context {
 	case HoverAccount:
-		return buildAccountHoverWithTransactions(element.account.Name, balances, transactions)
+		return buildAccountHoverWithTransactions(element.account.Name, balances, transactions, directives)
 	case HoverAmount:
 		commodityFormats := formatter.ExtractCommodityFormats(directives)
 		defSymbol := defaultCommoditySymbol(directives)
@@ -222,12 +222,16 @@ func buildHoverContentWithTransactions(element *hoverElement, balances analyzer.
 	}
 }
 
-func buildAccountHoverWithTransactions(accountName string, balances analyzer.AccountBalances, transactions []ast.Transaction) string {
+func buildAccountHoverWithTransactions(accountName string, balances analyzer.AccountBalances, transactions []ast.Transaction, directives []ast.Directive) string {
 	var sb strings.Builder
 
 	fmt.Fprintf(&sb, "**Account:** `%s`\n\n", accountName)
 
 	if commodityBalances, ok := balances[accountName]; ok && len(commodityBalances) > 0 {
+		commodityFormats := formatter.ExtractCommodityFormats(directives)
+		defSymbol := defaultCommoditySymbol(directives)
+		enrichCommodityFormatsFromTransactions(commodityFormats, transactions)
+
 		sb.WriteString("**Balance:**\n")
 
 		commodities := make([]string, 0, len(commodityBalances))
@@ -238,7 +242,11 @@ func buildAccountHoverWithTransactions(accountName string, balances analyzer.Acc
 
 		for _, c := range commodities {
 			bal := commodityBalances[c]
-			fmt.Fprintf(&sb, "- %s %s\n", bal.String(), c)
+			symbol := c
+			if symbol == "" && defSymbol != "" {
+				symbol = defSymbol
+			}
+			fmt.Fprintf(&sb, "- %s\n", formatter.FormatBalance(bal, symbol, commodityFormats))
 		}
 		sb.WriteString("\n")
 	}
@@ -247,6 +255,24 @@ func buildAccountHoverWithTransactions(accountName string, balances analyzer.Acc
 	fmt.Fprintf(&sb, "**Postings:** %d", postingCount)
 
 	return sb.String()
+}
+
+func enrichCommodityFormatsFromTransactions(formats map[string]formatter.CommodityFormat, transactions []ast.Transaction) {
+	for i := range transactions {
+		for j := range transactions[i].Postings {
+			amt := transactions[i].Postings[j].Amount
+			if amt == nil || amt.Commodity.Symbol == "" {
+				continue
+			}
+			if _, ok := formats[amt.Commodity.Symbol]; ok {
+				continue
+			}
+			formats[amt.Commodity.Symbol] = formatter.CommodityFormat{
+				Position:     amt.Commodity.Position,
+				SpaceBetween: amt.Commodity.Position == ast.CommodityRight,
+			}
+		}
+	}
 }
 
 func defaultCommoditySymbol(directives []ast.Directive) string {

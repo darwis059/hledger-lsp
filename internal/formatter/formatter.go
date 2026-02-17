@@ -4,6 +4,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/shopspring/decimal"
 	"go.lsp.dev/protocol"
 
 	"github.com/juev/hledger-lsp/internal/ast"
@@ -430,6 +431,34 @@ func FormatAmount(amount *ast.Amount, commodityFormats map[string]CommodityForma
 	var sb strings.Builder
 	writeAmountWithSign(&sb, amount, commodityFormats)
 	return sb.String()
+}
+
+// FormatBalance renders a decimal balance with a commodity symbol, respecting
+// commodity formats for position, spacing, and number formatting.
+// If commodity is empty, the raw quantity is returned.
+func FormatBalance(quantity decimal.Decimal, commodity string, commodityFormats map[string]CommodityFormat) string {
+	if commodity == "" {
+		return quantity.String()
+	}
+
+	amount := &ast.Amount{
+		Quantity:  quantity,
+		Commodity: ast.Commodity{Symbol: commodity, Position: ast.CommodityRight},
+	}
+
+	if commodityFormats != nil {
+		if cf, ok := commodityFormats[commodity]; ok {
+			amount.Commodity.Position = cf.Position
+		} else if cf, ok := commodityFormats[""]; ok {
+			amount.Commodity.Position = cf.Position
+		}
+	}
+
+	if quantity.IsNegative() && amount.Commodity.Position == ast.CommodityLeft {
+		amount.SignBeforeCommodity = true
+	}
+
+	return FormatAmount(amount, commodityFormats)
 }
 
 func formatAmountQuantity(amount *ast.Amount, commodityFormats map[string]CommodityFormat) string {
