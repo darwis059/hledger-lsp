@@ -694,23 +694,23 @@ func TestHover_PartialDateWithStatus(t *testing.T) {
 	assert.Contains(t, result.Contents.Value, "Магазин")
 }
 
-func TestDefaultCommoditySymbol(t *testing.T) {
+func TestDefaultCommodityInfo(t *testing.T) {
 	t.Run("returns symbol from DefaultCommodityDirective", func(t *testing.T) {
 		directives := []ast.Directive{
 			ast.DefaultCommodityDirective{Symbol: "EUR"},
 		}
-		assert.Equal(t, "EUR", defaultCommoditySymbol(directives))
+		assert.Equal(t, "EUR", defaultCommodityInfo(directives).symbol)
 	})
 
 	t.Run("returns empty string when no default commodity", func(t *testing.T) {
 		directives := []ast.Directive{
 			ast.AccountDirective{Account: ast.Account{Name: "expenses:food"}},
 		}
-		assert.Equal(t, "", defaultCommoditySymbol(directives))
+		assert.Equal(t, "", defaultCommodityInfo(directives).symbol)
 	})
 
 	t.Run("returns empty string for nil directives", func(t *testing.T) {
-		assert.Equal(t, "", defaultCommoditySymbol(nil))
+		assert.Equal(t, "", defaultCommodityInfo(nil).symbol)
 	})
 
 	t.Run("returns last directive when multiple exist", func(t *testing.T) {
@@ -719,7 +719,7 @@ func TestDefaultCommoditySymbol(t *testing.T) {
 			ast.AccountDirective{Account: ast.Account{Name: "expenses:food"}},
 			ast.DefaultCommodityDirective{Symbol: "USD"},
 		}
-		assert.Equal(t, "USD", defaultCommoditySymbol(directives))
+		assert.Equal(t, "USD", defaultCommodityInfo(directives).symbol)
 	})
 }
 
