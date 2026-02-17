@@ -2326,6 +2326,24 @@ func TestParser_PermissiveAccountNames(t *testing.T) {
 			wantAmount:  "50",
 			wantComm:    "EUR",
 		},
+		{
+			name: "at-sign after double-space is cost not account",
+			input: `2024-01-15 test
+    expenses:cafe  50 EUR @ $1
+    assets:cash`,
+			wantAccount: "expenses:cafe",
+			wantAmount:  "50",
+			wantComm:    "EUR",
+		},
+		{
+			name: "single space before semicolon is part of account",
+			input: `2024-01-15 test
+    expenses:food ;tag  50 EUR
+    assets:cash`,
+			wantAccount: "expenses:food ;tag",
+			wantAmount:  "50",
+			wantComm:    "EUR",
+		},
 	}
 
 	for _, tt := range tests {
@@ -2350,6 +2368,20 @@ func TestParser_PermissiveAccountNames(t *testing.T) {
 		require.Len(t, journal.Transactions, 1)
 
 		p := journal.Transactions[0].Postings[0]
+		require.NotNil(t, p.Cost, "cost should not be nil")
+		assert.False(t, p.Cost.IsTotal, "should be unit cost, not total")
+		assert.Equal(t, "1", p.Cost.Amount.Quantity.String())
+		assert.Equal(t, "$", p.Cost.Amount.Commodity.Symbol)
+	})
+
+	t.Run("at-sign after double-space is cost annotation", func(t *testing.T) {
+		input := "2024-01-15 test\n    expenses:cafe  50 EUR @ $1\n    assets:cash"
+		journal, errs := Parse(input)
+		require.Empty(t, errs, "unexpected parse errors: %v", errs)
+		require.Len(t, journal.Transactions, 1)
+
+		p := journal.Transactions[0].Postings[0]
+		assert.Equal(t, "expenses:cafe", p.Account.Name)
 		require.NotNil(t, p.Cost, "cost should not be nil")
 		assert.False(t, p.Cost.IsTotal, "should be unit cost, not total")
 		assert.Equal(t, "1", p.Cost.Amount.Quantity.String())
