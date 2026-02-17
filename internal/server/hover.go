@@ -67,9 +67,9 @@ func (s *Server) Hover(ctx context.Context, params *protocol.HoverParams) (*prot
 		balances = analyzer.CalculateAccountBalances(journal)
 	}
 
-	defaultCommodity := defaultCommoditySymbol(directives)
+	defCommodity := defaultCommodityInfo(directives)
 
-	content := buildHoverContentWithTransactions(element, balances, allTransactions, defaultCommodity)
+	content := buildHoverContentWithTransactions(element, balances, allTransactions, defCommodity)
 	if content == "" {
 		return nil, nil
 	}
@@ -202,12 +202,12 @@ func payeeRange(tx *ast.Transaction, payee string) ast.Range {
 	}
 }
 
-func buildHoverContentWithTransactions(element *hoverElement, balances analyzer.AccountBalances, transactions []ast.Transaction, defaultCommodity string) string {
+func buildHoverContentWithTransactions(element *hoverElement, balances analyzer.AccountBalances, transactions []ast.Transaction, defCommodity commodityInfo) string {
 	switch element.context {
 	case HoverAccount:
 		return buildAccountHoverWithTransactions(element.account.Name, balances, transactions)
 	case HoverAmount:
-		return buildAmountHover(element.amount, element.cost, defaultCommodity)
+		return buildAmountHover(element.amount, element.cost, defCommodity)
 	case HoverPayee:
 		return buildPayeeHoverWithTransactions(element.payee, transactions)
 	case HoverDate:
@@ -248,35 +248,62 @@ func buildAccountHoverWithTransactions(accountName string, balances analyzer.Acc
 	return sb.String()
 }
 
-func defaultCommoditySymbol(directives []ast.Directive) string {
-	var symbol string
-	for _, dir := range directives {
-		if d, ok := dir.(ast.DefaultCommodityDirective); ok {
-			symbol = d.Symbol
-		}
-	}
-	return symbol
+type commodityInfo struct {
+	Symbol   string
+	Position ast.CommodityPosition
 }
 
-func buildAmountHover(amount *ast.Amount, cost *ast.Cost, defaultCommodity string) string {
+func defaultCommodityInfo(directives []ast.Directive) commodityInfo {
+	var info commodityInfo
+	for _, dir := range directives {
+		if d, ok := dir.(ast.DefaultCommodityDirective); ok {
+			info.Symbol = d.Symbol
+			if d.Symbol != "" && strings.HasPrefix(d.Format, d.Symbol) {
+				info.Position = ast.CommodityLeft
+			} else {
+				info.Position = ast.CommodityRight
+			}
+		}
+	}
+	return info
+}
+
+func defaultCommoditySymbol(directives []ast.Directive) string {
+	return defaultCommodityInfo(directives).Symbol
+}
+
+func formatCommodityAmount(quantity string, symbol string, position ast.CommodityPosition) string {
+	if symbol == "" {
+		return quantity
+	}
+	if position == ast.CommodityLeft {
+		return symbol + quantity
+	}
+	return quantity + " " + symbol
+}
+
+func buildAmountHover(amount *ast.Amount, cost *ast.Cost, defCommodity commodityInfo) string {
 	var sb strings.Builder
 
 	commodity := amount.Commodity.Symbol
-	if commodity == "" {
-		commodity = defaultCommodity
+	position := amount.Commodity.Position
+	if commodity == "" && defCommodity.Symbol != "" {
+		commodity = defCommodity.Symbol
+		position = defCommodity.Position
 	}
 
-	if commodity != "" {
-		fmt.Fprintf(&sb, "**Amount:** %s %s", amount.Quantity.String(), commodity)
-	} else {
-		fmt.Fprintf(&sb, "**Amount:** %s", amount.Quantity.String())
-	}
+	fmt.Fprintf(&sb, "**Amount:** %s", formatCommodityAmount(amount.Quantity.String(), commodity, position))
 
 	if cost != nil {
+		costFormatted := formatCommodityAmount(
+			cost.Amount.Quantity.String(),
+			cost.Amount.Commodity.Symbol,
+			cost.Amount.Commodity.Position,
+		)
 		if cost.IsTotal {
-			fmt.Fprintf(&sb, "\n\n**Total cost:** @@ %s %s", cost.Amount.Quantity.String(), cost.Amount.Commodity.Symbol)
+			fmt.Fprintf(&sb, "\n\n**Total cost:** @@ %s", costFormatted)
 		} else {
-			fmt.Fprintf(&sb, "\n\n**Unit cost:** @ %s %s", cost.Amount.Quantity.String(), cost.Amount.Commodity.Symbol)
+			fmt.Fprintf(&sb, "\n\n**Unit cost:** @ %s", costFormatted)
 		}
 	}
 

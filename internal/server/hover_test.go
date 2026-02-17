@@ -123,6 +123,8 @@ func TestHover_Account(t *testing.T) {
 
 func TestHover_Amount(t *testing.T) {
 	srv := NewServer()
+	//                                        0         1         2
+	//                                        0123456789012345678901234
 	content := `2024-01-15 test
     expenses:food  $50.00
     assets:cash`
@@ -134,7 +136,7 @@ func TestHover_Amount(t *testing.T) {
 			TextDocument: protocol.TextDocumentIdentifier{
 				URI: "file:///test.journal",
 			},
-			Position: protocol.Position{Line: 1, Character: 17},
+			Position: protocol.Position{Line: 1, Character: 20},
 		},
 	}
 
@@ -142,7 +144,31 @@ func TestHover_Amount(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	assert.Contains(t, result.Contents.Value, "50")
+	assert.Contains(t, result.Contents.Value, "$50")
+}
+
+func TestHover_AmountSuffixCommodity(t *testing.T) {
+	srv := NewServer()
+	content := `2024-01-15 test
+    expenses:food  50.00 EUR
+    assets:cash`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 1, Character: 19},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Contains(t, result.Contents.Value, "50 EUR")
 }
 
 func TestHover_Payee(t *testing.T) {
@@ -720,7 +746,33 @@ func TestHover_AmountWithDefaultCommodity(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	assert.Contains(t, result.Contents.Value, "EUR")
+	assert.Contains(t, result.Contents.Value, "1000 EUR")
+}
+
+func TestHover_AmountWithDefaultCommodityPrefix(t *testing.T) {
+	srv := NewServer()
+	content := `D $1,000.00
+
+2024-01-15 test
+    expenses:food  1,000.00
+    assets:cash`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 3, Character: 19},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Contains(t, result.Contents.Value, "$1000")
 }
 
 func TestHover_AmountWithDefaultCommodity_ExplicitOverrides(t *testing.T) {
@@ -746,6 +798,6 @@ func TestHover_AmountWithDefaultCommodity_ExplicitOverrides(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	assert.Contains(t, result.Contents.Value, "$")
+	assert.Contains(t, result.Contents.Value, "$50")
 	assert.NotContains(t, result.Contents.Value, "EUR")
 }
