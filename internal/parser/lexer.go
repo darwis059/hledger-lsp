@@ -830,6 +830,9 @@ func (l *Lexer) looksLikeDate() bool {
 }
 
 func (l *Lexer) looksLikeVirtualAccount() bool {
+	if !l.onPostingLine {
+		return false
+	}
 	for i := l.pos + 1; i < len(l.input); i++ {
 		ch := l.input[i]
 		if ch == ')' || ch == '\n' {

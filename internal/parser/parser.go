@@ -75,6 +75,12 @@ func (p *Parser) parseJournal() *ast.Journal {
 					journal.Directives = append(journal.Directives, dir)
 				}
 			}
+		case TokenIndent:
+			p.advance()
+			if p.current.Type != TokenNewline && p.current.Type != TokenEOF {
+				p.error("unexpected content: %s", p.current.Value)
+				p.skipToNextLine()
+			}
 		default:
 			if p.current.Value != "" {
 				p.error("unexpected content: %s", p.current.Value)

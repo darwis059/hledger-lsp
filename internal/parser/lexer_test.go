@@ -1825,3 +1825,34 @@ func TestLexer_AfterNumberResetAcrossLines(t *testing.T) {
 		})
 	}
 }
+
+func TestLexer_CodeWithColon(t *testing.T) {
+	t.Run("code with colon on header line emits TokenCode", func(t *testing.T) {
+		input := "2024-01-15 * (test:123) description"
+		lexer := NewLexer(input)
+		tokens := collectTokens(lexer)
+
+		tok := findToken(tokens, TokenCode)
+		require.NotNil(t, tok, "expected TokenCode for (test:123) on header line")
+		assert.Equal(t, "test:123", tok.Value)
+	})
+
+	t.Run("code with colon without status", func(t *testing.T) {
+		input := "2024-01-15 (inv:456) grocery store"
+		lexer := NewLexer(input)
+		tokens := collectTokens(lexer)
+
+		tok := findToken(tokens, TokenCode)
+		require.NotNil(t, tok, "expected TokenCode for (inv:456) on header line")
+		assert.Equal(t, "inv:456", tok.Value)
+	})
+
+	t.Run("virtual account with colon on posting line still emits LParen", func(t *testing.T) {
+		input := "2024-01-15 test\n    (expenses:food)  $50"
+		lexer := NewLexer(input)
+		tokens := collectTokens(lexer)
+
+		tok := findToken(tokens, TokenLParen)
+		require.NotNil(t, tok, "expected TokenLParen for virtual account on posting line")
+	})
+}

@@ -2032,3 +2032,66 @@ func TestParseError_End_AtEOF(t *testing.T) {
 	assert.Equal(t, err.End, err.Pos,
 		"End should equal Pos for EOF errors (zero-width range)")
 }
+
+func TestParser_WhitespaceOnlyLineAtJournalLevel(t *testing.T) {
+	t.Run("spaces between transactions", func(t *testing.T) {
+		input := "2024-01-15 first\n    a:b  $10\n    c:d\n    \n2024-01-16 second\n    e:f  $20\n    g:h\n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs, "spaces-only line between transactions should not error")
+		require.Len(t, journal.Transactions, 2)
+	})
+
+	t.Run("tab between transactions", func(t *testing.T) {
+		input := "2024-01-15 first\n    a:b  $10\n    c:d\n\t\n2024-01-16 second\n    e:f  $20\n    g:h\n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs, "tab-only line between transactions should not error")
+		require.Len(t, journal.Transactions, 2)
+	})
+
+	t.Run("whitespace-only line at start of journal", func(t *testing.T) {
+		input := "    \n2024-01-15 test\n    a:b  $10\n    c:d\n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs, "whitespace-only line at start should not error")
+		require.Len(t, journal.Transactions, 1)
+	})
+
+	t.Run("whitespace-only line at end of journal", func(t *testing.T) {
+		input := "2024-01-15 test\n    a:b  $10\n    c:d\n    \n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs, "whitespace-only line at end should not error")
+		require.Len(t, journal.Transactions, 1)
+	})
+
+	t.Run("multiple whitespace-only lines", func(t *testing.T) {
+		input := "    \n\t\n    \n2024-01-15 test\n    a:b  $10\n    c:d\n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs, "multiple whitespace-only lines should not error")
+		require.Len(t, journal.Transactions, 1)
+	})
+
+	t.Run("indented content at journal level still errors", func(t *testing.T) {
+		input := "    some random text\n"
+		_, errs := Parse(input)
+		require.NotEmpty(t, errs, "indented non-whitespace content at journal level should error")
+	})
+}
+
+func TestParser_TransactionCodeWithColon(t *testing.T) {
+	t.Run("code with colon and status", func(t *testing.T) {
+		input := "2024-01-15 * (test:123) grocery store\n    expenses:food  $50\n    assets:cash\n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs, "transaction code with colon should not error")
+		require.Len(t, journal.Transactions, 1)
+		assert.Equal(t, "test:123", journal.Transactions[0].Code)
+		assert.Equal(t, "grocery store", journal.Transactions[0].Description)
+	})
+
+	t.Run("code with colon without status", func(t *testing.T) {
+		input := "2024-01-15 (inv:456) grocery store\n    expenses:food  $50\n    assets:cash\n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs, "transaction code with colon should not error")
+		require.Len(t, journal.Transactions, 1)
+		assert.Equal(t, "inv:456", journal.Transactions[0].Code)
+		assert.Equal(t, "grocery store", journal.Transactions[0].Description)
+	})
+}
