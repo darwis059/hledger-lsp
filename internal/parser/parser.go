@@ -14,6 +14,7 @@ import (
 type ParseError struct {
 	Message string
 	Pos     Position
+	End     Position
 }
 
 func (e ParseError) Error() string {
@@ -313,17 +314,17 @@ func (p *Parser) parseDate() *ast.Date {
 	switch len(parts) {
 	case 2:
 		if p.defaultYear == 0 {
-			p.errorAt(pos, "partial date requires Y directive: %s", value)
+			p.errorAt(pos, end, "partial date requires Y directive: %s", value)
 			return nil
 		}
 		month, err := strconv.Atoi(parts[0])
 		if err != nil {
-			p.errorAt(pos, "invalid month: %s", parts[0])
+			p.errorAt(pos, end, "invalid month: %s", parts[0])
 			return nil
 		}
 		day, err := strconv.Atoi(parts[1])
 		if err != nil {
-			p.errorAt(pos, "invalid day: %s", parts[1])
+			p.errorAt(pos, end, "invalid day: %s", parts[1])
 			return nil
 		}
 		return &ast.Date{
@@ -335,17 +336,17 @@ func (p *Parser) parseDate() *ast.Date {
 	case 3:
 		year, err := strconv.Atoi(parts[0])
 		if err != nil {
-			p.errorAt(pos, "invalid year: %s", parts[0])
+			p.errorAt(pos, end, "invalid year: %s", parts[0])
 			return nil
 		}
 		month, err := strconv.Atoi(parts[1])
 		if err != nil {
-			p.errorAt(pos, "invalid month: %s", parts[1])
+			p.errorAt(pos, end, "invalid month: %s", parts[1])
 			return nil
 		}
 		day, err := strconv.Atoi(parts[2])
 		if err != nil {
-			p.errorAt(pos, "invalid day: %s", parts[2])
+			p.errorAt(pos, end, "invalid day: %s", parts[2])
 			return nil
 		}
 		return &ast.Date{
@@ -355,7 +356,7 @@ func (p *Parser) parseDate() *ast.Date {
 			Range: ast.Range{Start: toASTPosition(pos), End: toASTPosition(end)},
 		}
 	default:
-		p.errorAt(pos, "invalid date format: %s", value)
+		p.errorAt(pos, end, "invalid date format: %s", value)
 		return nil
 	}
 }
@@ -1231,13 +1232,14 @@ func (p *Parser) skipToNextLine() {
 }
 
 func (p *Parser) error(format string, args ...any) {
-	p.errorAt(p.current.Pos, format, args...)
+	p.errorAt(p.current.Pos, p.current.End, format, args...)
 }
 
-func (p *Parser) errorAt(pos Position, format string, args ...any) {
+func (p *Parser) errorAt(pos, end Position, format string, args ...any) {
 	p.errors = append(p.errors, ParseError{
 		Message: fmt.Sprintf(format, args...),
 		Pos:     pos,
+		End:     end,
 	})
 }
 

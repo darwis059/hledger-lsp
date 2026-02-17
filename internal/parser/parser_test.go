@@ -1983,3 +1983,43 @@ func TestParser_PrefixCommodityAfterBareNumber(t *testing.T) {
 	assert.Equal(t, "RUB", p3.Amount.Commodity.Symbol)
 	assert.Equal(t, "11,00", p3.Amount.RawQuantity)
 }
+
+func TestParseError_End_ExpectedAccountName(t *testing.T) {
+	input := "2024-01-15 test\n    12345"
+
+	_, errs := Parse(input)
+	require.NotEmpty(t, errs)
+
+	err := errs[0]
+	assert.Contains(t, err.Message, "expected account name")
+	assert.Greater(t, err.End.Column, err.Pos.Column,
+		"End should be after Pos for token-spanning errors")
+}
+
+func TestParseError_End_PartialDate(t *testing.T) {
+	input := "01-15 test\n    expenses:food  $50\n    assets:cash"
+
+	_, errs := Parse(input)
+	require.NotEmpty(t, errs)
+
+	err := errs[0]
+	assert.Contains(t, err.Message, "partial date requires Y directive")
+	assert.Equal(t, 1, err.Pos.Line)
+	assert.Equal(t, 1, err.Pos.Column)
+	assert.Equal(t, 1, err.End.Line)
+	assert.Greater(t, err.End.Column, err.Pos.Column,
+		"End should span the full date token")
+}
+
+func TestParseError_End_AtEOF(t *testing.T) {
+	input := "2024-01-15 test\n    "
+
+	_, errs := Parse(input)
+	if len(errs) == 0 {
+		return
+	}
+
+	err := errs[0]
+	assert.Equal(t, err.End, err.Pos,
+		"End should equal Pos for EOF errors (zero-width range)")
+}

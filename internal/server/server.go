@@ -337,8 +337,8 @@ func (s *Server) analyze(content string) []protocol.Diagnostic {
 					Character: uint32(err.Pos.Column - 1),
 				},
 				End: protocol.Position{
-					Line:      uint32(err.Pos.Line - 1),
-					Character: uint32(err.Pos.Column - 1),
+					Line:      uint32(err.End.Line - 1),
+					Character: uint32(err.End.Column - 1),
 				},
 			},
 			Severity: protocol.DiagnosticSeverityError,

@@ -128,11 +128,16 @@ func (l *Loader) loadWithContent(path, content string, visited map[string]bool) 
 			Column: e.Pos.Column,
 			Offset: e.Pos.Offset,
 		}
+		end := ast.Position{
+			Line:   e.End.Line,
+			Column: e.End.Column,
+			Offset: e.End.Offset,
+		}
 		errors = append(errors, LoadError{
 			Kind:    ErrorParseError,
 			Path:    path,
 			Message: e.Message,
-			Range:   ast.Range{Start: pos, End: pos},
+			Range:   ast.Range{Start: pos, End: end},
 		})
 	}
 

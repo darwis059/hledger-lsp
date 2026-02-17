@@ -593,6 +593,48 @@ func TestServer_PublishDiagnostics_ParseError(t *testing.T) {
 	assert.Equal(t, uri, diagnostics[0].URI)
 }
 
+func TestServer_PublishDiagnostics_ParseError_RangeSpansToken(t *testing.T) {
+	srv := NewServer()
+	client := &mockClient{}
+	srv.SetClient(client)
+
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := `2024-01-15 test
+    12345`
+
+	params := &protocol.DidOpenTextDocumentParams{
+		TextDocument: protocol.TextDocumentItem{
+			URI:  uri,
+			Text: content,
+		},
+	}
+
+	err := srv.DidOpen(context.Background(), params)
+	require.NoError(t, err)
+
+	time.Sleep(100 * time.Millisecond)
+
+	diagnostics := client.getDiagnostics()
+	require.NotEmpty(t, diagnostics)
+
+	var parseErrDiag *protocol.Diagnostic
+	for _, pub := range diagnostics {
+		for i, d := range pub.Diagnostics {
+			if d.Severity == protocol.DiagnosticSeverityError && d.Source == "hledger-lsp" {
+				parseErrDiag = &pub.Diagnostics[i]
+				break
+			}
+		}
+	}
+	require.NotNil(t, parseErrDiag, "expected a parse error diagnostic")
+
+	assert.True(t,
+		parseErrDiag.Range.End.Character > parseErrDiag.Range.Start.Character ||
+			parseErrDiag.Range.End.Line > parseErrDiag.Range.Start.Line,
+		"diagnostic range should span the token, got Start=%v End=%v",
+		parseErrDiag.Range.Start, parseErrDiag.Range.End)
+}
+
 func TestServer_PublishDiagnostics_BalanceError(t *testing.T) {
 	srv := NewServer()
 	client := &mockClient{}
