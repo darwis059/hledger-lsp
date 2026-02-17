@@ -2172,6 +2172,30 @@ func TestParser_WhitespaceOnlyLineAtJournalLevel(t *testing.T) {
 	})
 }
 
+func TestExtractTagValue(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{"simple value", "value", "value"},
+		{"value with leading space", " value", "value"},
+		{"value truncated at double space", "value  extra", "value"},
+		{"leading space then double space", " value  extra", "value"},
+		{"tab leading", "\tvalue", "value"},
+		{"empty after colon", "", ""},
+		{"only spaces", "   ", ""},
+		{"leading spaces then text", "  extra", "extra"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ExtractTagValue(tt.raw)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestParser_TagValueDoubleSpaceTermination(t *testing.T) {
 	tests := []struct {
 		name      string

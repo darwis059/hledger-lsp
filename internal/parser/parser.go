@@ -1177,11 +1177,7 @@ func parseTags(text string, basePos Position) []ast.Tag {
 
 		value := ""
 		if colonIdx+1 < len(trimmed) {
-			rawValue := strings.TrimLeft(trimmed[colonIdx+1:], " \t")
-			if idx := strings.Index(rawValue, "  "); idx != -1 {
-				rawValue = rawValue[:idx]
-			}
-			value = strings.TrimSpace(rawValue)
+			value = ExtractTagValue(trimmed[colonIdx+1:])
 		}
 
 		tagStart := strings.Index(text[searchStart:], name+":")
@@ -1214,6 +1210,17 @@ func parseTags(text string, basePos Position) []ast.Tag {
 	}
 
 	return tags
+}
+
+// ExtractTagValue extracts a tag value from raw text after the colon.
+// It trims leading whitespace, truncates at 2+ consecutive spaces
+// (double-space terminates the value), and trims the result.
+func ExtractTagValue(raw string) string {
+	v := strings.TrimLeft(raw, " \t")
+	if idx := strings.Index(v, "  "); idx != -1 {
+		v = v[:idx]
+	}
+	return strings.TrimSpace(v)
 }
 
 func isValidTagName(name string) bool {

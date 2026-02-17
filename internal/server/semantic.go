@@ -418,11 +418,7 @@ func extractTagTokensFromComment(tok parser.Token) []semanticToken {
 
 		// Tag value (if present)
 		if colonIdx+1 < len(trimmed) {
-			rawValue := strings.TrimLeft(trimmed[colonIdx+1:], " \t")
-			if idx := strings.Index(rawValue, "  "); idx != -1 {
-				rawValue = rawValue[:idx]
-			}
-			value := strings.TrimSpace(rawValue)
+			value := parser.ExtractTagValue(trimmed[colonIdx+1:])
 			if value != "" {
 				// Find where the value starts in the original text
 				tagNameEnd := tagStart + len(name) + 1
