@@ -9,7 +9,7 @@ import (
 	"go.lsp.dev/protocol"
 )
 
-func TestWillSaveWaitUntil_ReturnsEdits(t *testing.T) {
+func TestWillSaveWaitUntil_AlwaysReturnsNil(t *testing.T) {
 	srv := NewServer()
 	content := "2024-01-15 grocery\n    expenses:food  $50\n    assets:cash   $-50"
 	uri := protocol.DocumentURI("file:///test.journal")
@@ -22,7 +22,7 @@ func TestWillSaveWaitUntil_ReturnsEdits(t *testing.T) {
 
 	edits, err := srv.WillSaveWaitUntil(context.Background(), params)
 	require.NoError(t, err)
-	assert.NotNil(t, edits)
+	assert.Nil(t, edits, "WillSaveWaitUntil should always return nil to respect editor.formatOnSave")
 }
 
 func TestWillSaveWaitUntil_FormattingDisabled(t *testing.T) {

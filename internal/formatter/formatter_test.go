@@ -1147,3 +1147,97 @@ func TestFormatDocument_PrefixCommodityAfterBareNumber(t *testing.T) {
 	assert.Contains(t, result, "RUB100,00", "prefix commodity amount must survive formatting")
 	assert.Contains(t, result, "RUB11,00", "prefix commodity amount must survive formatting")
 }
+
+func TestFormatDocument_ChineseAccountNames(t *testing.T) {
+	input := `2024-01-15 超市购物
+    支出:食品  ¥50.00
+    资产:现金`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "支出:食品", "Chinese account names must be preserved")
+	assert.Contains(t, result, "¥50.00", "amount must be preserved")
+	assert.Contains(t, result, "资产:现金", "Chinese account without amount must be preserved")
+
+	lines := strings.Split(result, "\n")
+	for i, line := range lines {
+		assert.Equal(t, strings.TrimRight(line, " \t"), line,
+			"line %d should have no trailing spaces: %q", i, line)
+	}
+}
+
+func TestFormatDocument_ChineseTrailingSpaces(t *testing.T) {
+	input := "2024-01-15 超市购物   \n    支出:食品  ¥50.00  \n    资产:现金   "
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	lines := strings.Split(result, "\n")
+	for i, line := range lines {
+		assert.Equal(t, strings.TrimRight(line, " \t"), line,
+			"line %d should have no trailing spaces: %q", i, line)
+	}
+}
+
+func TestFormatDocument_ChineseWithGlobalAlignment(t *testing.T) {
+	input := `2024-01-15 超市购物
+    支出:食品  ¥50.00
+    资产:现金
+
+2024-01-16 网上购物
+    支出:电子产品  ¥2000.00
+    资产:银行卡`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 2)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	inputLineCount := len(strings.Split(input, "\n"))
+	resultLineCount := len(strings.Split(result, "\n"))
+	assert.Equal(t, inputLineCount, resultLineCount,
+		"formatting should not add extra blank lines")
+
+	lines := strings.Split(result, "\n")
+	for i, line := range lines {
+		assert.Equal(t, strings.TrimRight(line, " \t"), line,
+			"line %d should have no trailing spaces: %q", i, line)
+	}
+}
+
+func TestFormatDocument_MixedChineseLatinAccounts(t *testing.T) {
+	input := `2024-01-15 mixed transaction
+    expenses:食品  $50.00
+    assets:现金
+
+2024-01-16 another one
+    支出:groceries  $30.00
+    资产:bank`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 2)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "expenses:食品", "mixed account names must be preserved")
+	assert.Contains(t, result, "assets:现金", "mixed account names must be preserved")
+	assert.Contains(t, result, "支出:groceries", "mixed account names must be preserved")
+	assert.Contains(t, result, "资产:bank", "mixed account names must be preserved")
+
+	inputLineCount := len(strings.Split(input, "\n"))
+	resultLineCount := len(strings.Split(result, "\n"))
+	assert.Equal(t, inputLineCount, resultLineCount,
+		"formatting should not add extra blank lines")
+}

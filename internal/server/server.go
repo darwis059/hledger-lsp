@@ -91,7 +91,7 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 			Save: &protocol.SaveOptions{
 				IncludeText: false,
 			},
-			WillSaveWaitUntil: settings.Features.Formatting,
+			WillSaveWaitUntil: false,
 		},
 		DocumentSymbolProvider:    true,
 		DocumentHighlightProvider: true,
@@ -489,19 +489,8 @@ func (s *Server) GetDocument(uri protocol.DocumentURI) (string, bool) {
 	return "", false
 }
 
-func (s *Server) WillSaveWaitUntil(ctx context.Context, params *protocol.WillSaveTextDocumentParams) ([]protocol.TextEdit, error) {
-	settings := s.getSettings()
-	if !settings.Features.Formatting {
-		return nil, nil
-	}
-
-	if _, ok := s.getJournalDoc(params.TextDocument.URI); !ok {
-		return nil, nil
-	}
-
-	return s.Format(ctx, &protocol.DocumentFormattingParams{
-		TextDocument: params.TextDocument,
-	})
+func (s *Server) WillSaveWaitUntil(_ context.Context, _ *protocol.WillSaveTextDocumentParams) ([]protocol.TextEdit, error) {
+	return nil, nil
 }
 
 func (s *Server) Format(ctx context.Context, params *protocol.DocumentFormattingParams) ([]protocol.TextEdit, error) {
