@@ -1148,6 +1148,14 @@ func TestFormatDocument_PrefixCommodityAfterBareNumber(t *testing.T) {
 	assert.Contains(t, result, "RUB11,00", "prefix commodity amount must survive formatting")
 }
 
+func assertNoTrailingWhitespace(t *testing.T, result string) {
+	t.Helper()
+	for i, line := range strings.Split(result, "\n") {
+		assert.Equal(t, strings.TrimRight(line, " \t"), line,
+			"line %d should have no trailing spaces: %q", i, line)
+	}
+}
+
 func TestFormatDocument_ChineseAccountNames(t *testing.T) {
 	input := `2024-01-15 超市购物
     支出:食品  ¥50.00
@@ -1163,12 +1171,7 @@ func TestFormatDocument_ChineseAccountNames(t *testing.T) {
 	assert.Contains(t, result, "支出:食品", "Chinese account names must be preserved")
 	assert.Contains(t, result, "¥50.00", "amount must be preserved")
 	assert.Contains(t, result, "资产:现金", "Chinese account without amount must be preserved")
-
-	lines := strings.Split(result, "\n")
-	for i, line := range lines {
-		assert.Equal(t, strings.TrimRight(line, " \t"), line,
-			"line %d should have no trailing spaces: %q", i, line)
-	}
+	assertNoTrailingWhitespace(t, result)
 }
 
 func TestFormatDocument_ChineseTrailingSpaces(t *testing.T) {
@@ -1176,15 +1179,12 @@ func TestFormatDocument_ChineseTrailingSpaces(t *testing.T) {
 
 	journal, errs := parser.Parse(input)
 	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
 
 	edits := FormatDocument(journal, input)
 	result := applyEdits(input, edits)
 
-	lines := strings.Split(result, "\n")
-	for i, line := range lines {
-		assert.Equal(t, strings.TrimRight(line, " \t"), line,
-			"line %d should have no trailing spaces: %q", i, line)
-	}
+	assertNoTrailingWhitespace(t, result)
 }
 
 func TestFormatDocument_ChineseWithGlobalAlignment(t *testing.T) {
@@ -1208,11 +1208,20 @@ func TestFormatDocument_ChineseWithGlobalAlignment(t *testing.T) {
 	assert.Equal(t, inputLineCount, resultLineCount,
 		"formatting should not add extra blank lines")
 
-	lines := strings.Split(result, "\n")
-	for i, line := range lines {
-		assert.Equal(t, strings.TrimRight(line, " \t"), line,
-			"line %d should have no trailing spaces: %q", i, line)
+	var amountPositions []int
+	for _, edit := range edits {
+		if pos := findAmountStartPosition(edit.NewText); pos > 0 {
+			amountPositions = append(amountPositions, pos)
+		}
 	}
+
+	require.GreaterOrEqual(t, len(amountPositions), 2, "expected at least 2 postings with amounts")
+	for i, pos := range amountPositions {
+		assert.Equal(t, amountPositions[0], pos,
+			"all amounts should be at the same column, posting %d is at %d, expected %d", i, pos, amountPositions[0])
+	}
+
+	assertNoTrailingWhitespace(t, result)
 }
 
 func TestFormatDocument_MixedChineseLatinAccounts(t *testing.T) {
@@ -1240,4 +1249,34 @@ func TestFormatDocument_MixedChineseLatinAccounts(t *testing.T) {
 	resultLineCount := len(strings.Split(result, "\n"))
 	assert.Equal(t, inputLineCount, resultLineCount,
 		"formatting should not add extra blank lines")
+
+	var amountPositions []int
+	for _, edit := range edits {
+		if pos := findAmountStartPosition(edit.NewText); pos > 0 {
+			amountPositions = append(amountPositions, pos)
+		}
+	}
+
+	require.GreaterOrEqual(t, len(amountPositions), 2, "expected at least 2 postings with amounts")
+	for i, pos := range amountPositions {
+		assert.Equal(t, amountPositions[0], pos,
+			"all amounts should be at the same column, posting %d is at %d, expected %d", i, pos, amountPositions[0])
+	}
+
+	assertNoTrailingWhitespace(t, result)
+}
+
+func findAmountStartPosition(s string) int {
+	spaceCount := 0
+	for i, r := range s {
+		if r == ' ' {
+			spaceCount++
+		} else {
+			if spaceCount >= 2 {
+				return i
+			}
+			spaceCount = 0
+		}
+	}
+	return -1
 }

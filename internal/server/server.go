@@ -489,6 +489,8 @@ func (s *Server) GetDocument(uri protocol.DocumentURI) (string, bool) {
 	return "", false
 }
 
+// WillSaveWaitUntil is intentionally a no-op: formatting is handled by textDocument/formatting
+// to respect the editor's formatOnSave setting.
 func (s *Server) WillSaveWaitUntil(_ context.Context, _ *protocol.WillSaveTextDocumentParams) ([]protocol.TextEdit, error) {
 	return nil, nil
 }
