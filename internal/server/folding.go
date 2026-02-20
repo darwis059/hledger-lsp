@@ -6,7 +6,9 @@ import (
 
 	"go.lsp.dev/protocol"
 
+	"github.com/juev/hledger-lsp/internal/filetype"
 	"github.com/juev/hledger-lsp/internal/parser"
+	"github.com/juev/hledger-lsp/internal/rules"
 )
 
 func (s *Server) FoldingRanges(ctx context.Context, params *protocol.FoldingRangeParams) ([]protocol.FoldingRange, error) {
@@ -19,6 +21,10 @@ func (s *Server) FoldingRanges(ctx context.Context, params *protocol.FoldingRang
 		return []protocol.FoldingRange{}, nil
 	}
 
+	if filetype.IsRules(string(params.TextDocument.URI)) {
+		return rulesFoldingRanges(doc), nil
+	}
+
 	var ranges []protocol.FoldingRange
 
 	ranges = append(ranges, findTransactionFolds(doc)...)
@@ -26,6 +32,24 @@ func (s *Server) FoldingRanges(ctx context.Context, params *protocol.FoldingRang
 	ranges = append(ranges, findCommentBlockFolds(doc)...)
 
 	return ranges, nil
+}
+
+func rulesFoldingRanges(doc string) []protocol.FoldingRange {
+	rf, _ := rules.Parse(doc)
+	ruleRanges := rules.FoldingRanges(rf)
+	result := make([]protocol.FoldingRange, 0, len(ruleRanges))
+	for _, r := range ruleRanges {
+		kind := protocol.RegionFoldingRange
+		if r.Kind == rules.FoldingKindComment {
+			kind = protocol.CommentFoldingRange
+		}
+		result = append(result, protocol.FoldingRange{
+			StartLine: r.StartLine,
+			EndLine:   r.EndLine,
+			Kind:      kind,
+		})
+	}
+	return result
 }
 
 func findTransactionFolds(content string) []protocol.FoldingRange {

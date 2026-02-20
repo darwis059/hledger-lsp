@@ -12,10 +12,12 @@ import (
 
 	"github.com/juev/hledger-lsp/internal/analyzer"
 	"github.com/juev/hledger-lsp/internal/cli"
+	"github.com/juev/hledger-lsp/internal/filetype"
 	"github.com/juev/hledger-lsp/internal/formatter"
 	"github.com/juev/hledger-lsp/internal/include"
 	"github.com/juev/hledger-lsp/internal/lsputil"
 	"github.com/juev/hledger-lsp/internal/parser"
+	"github.com/juev/hledger-lsp/internal/rules"
 	"github.com/juev/hledger-lsp/internal/workspace"
 )
 
@@ -177,8 +179,8 @@ func (s *Server) registerFileWatchers() {
 	if s.client == nil {
 		return
 	}
-	watchers := make([]protocol.FileSystemWatcher, 0, 4)
-	for _, pattern := range []string{"**/*.journal", "**/*.hledger", "**/*.j", "**/*.ledger"} {
+	watchers := make([]protocol.FileSystemWatcher, 0, 5)
+	for _, pattern := range []string{"**/*.journal", "**/*.hledger", "**/*.j", "**/*.ledger", "**/*.rules"} {
 		watchers = append(watchers, protocol.FileSystemWatcher{
 			GlobPattern: pattern,
 		})
@@ -288,6 +290,14 @@ func (s *Server) publishDiagnostics(ctx context.Context, docURI protocol.Documen
 		return
 	}
 
+	if filetype.IsRules(string(docURI)) {
+		_ = s.client.PublishDiagnostics(ctx, &protocol.PublishDiagnosticsParams{
+			URI:         docURI,
+			Diagnostics: s.analyzeRules(content),
+		})
+		return
+	}
+
 	path := uriToPath(docURI)
 	if path == "" {
 		return
@@ -303,16 +313,7 @@ func (s *Server) publishDiagnostics(ctx context.Context, docURI protocol.Documen
 			continue
 		}
 		diagnostics = append(diagnostics, protocol.Diagnostic{
-			Range: protocol.Range{
-				Start: protocol.Position{
-					Line:      uint32(max(0, err.Range.Start.Line-1)),
-					Character: uint32(max(0, err.Range.Start.Column-1)),
-				},
-				End: protocol.Position{
-					Line:      uint32(max(0, err.Range.End.Line-1)),
-					Character: uint32(max(0, err.Range.End.Column-1)),
-				},
-			},
+			Range:    *astRangeToProtocol(err.Range),
 			Severity: severity,
 			Source:   "hledger-lsp",
 			Message:  err.Message,
@@ -366,16 +367,7 @@ func (s *Server) analyze(content string) []protocol.Diagnostic {
 			continue
 		}
 		diagnostics = append(diagnostics, protocol.Diagnostic{
-			Range: protocol.Range{
-				Start: protocol.Position{
-					Line:      uint32(max(0, diag.Range.Start.Line-1)),
-					Character: uint32(max(0, diag.Range.Start.Column-1)),
-				},
-				End: protocol.Position{
-					Line:      uint32(max(0, diag.Range.End.Line-1)),
-					Character: uint32(max(0, diag.Range.End.Column-1)),
-				},
-			},
+			Range:    *astRangeToProtocol(diag.Range),
 			Severity: toProtocolSeverity(diag.Severity),
 			Source:   "hledger-lsp",
 			Message:  diag.Message,
@@ -384,6 +376,37 @@ func (s *Server) analyze(content string) []protocol.Diagnostic {
 	}
 
 	return diagnostics
+}
+
+func (s *Server) getJournalDoc(uri protocol.DocumentURI) (string, bool) {
+	if filetype.IsRules(string(uri)) {
+		return "", false
+	}
+	return s.GetDocument(uri)
+}
+
+func (s *Server) analyzeRules(content string) []protocol.Diagnostic {
+	// Rules diagnostics use their own code set; shouldIncludeDiagnostic does not apply here.
+	rf, parseDiags := rules.Parse(content)
+	ruleDiags := rules.Diagnostics(rf, parseDiags)
+	diags := make([]protocol.Diagnostic, 0, len(ruleDiags))
+	for _, d := range ruleDiags {
+		diags = append(diags, protocol.Diagnostic{
+			Range:    *astRangeToProtocol(d.Range),
+			Severity: rulesDiagSeverity(d.Severity),
+			Source:   "hledger-lsp",
+			Message:  d.Message,
+			Code:     d.Code,
+		})
+	}
+	return diags
+}
+
+func rulesDiagSeverity(s rules.DiagnosticSeverity) protocol.DiagnosticSeverity {
+	if s == rules.SeverityWarning {
+		return protocol.DiagnosticSeverityWarning
+	}
+	return protocol.DiagnosticSeverityError
 }
 
 func (s *Server) shouldIncludeDiagnostic(code string, settings diagnosticsSettings) bool {
@@ -472,13 +495,17 @@ func (s *Server) WillSaveWaitUntil(ctx context.Context, params *protocol.WillSav
 		return nil, nil
 	}
 
+	if _, ok := s.getJournalDoc(params.TextDocument.URI); !ok {
+		return nil, nil
+	}
+
 	return s.Format(ctx, &protocol.DocumentFormattingParams{
 		TextDocument: params.TextDocument,
 	})
 }
 
 func (s *Server) Format(ctx context.Context, params *protocol.DocumentFormattingParams) ([]protocol.TextEdit, error) {
-	doc, ok := s.GetDocument(params.TextDocument.URI)
+	doc, ok := s.getJournalDoc(params.TextDocument.URI)
 	if !ok {
 		return nil, nil
 	}

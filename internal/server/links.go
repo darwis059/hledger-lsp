@@ -6,7 +6,9 @@ import (
 
 	"go.lsp.dev/protocol"
 
+	"github.com/juev/hledger-lsp/internal/filetype"
 	"github.com/juev/hledger-lsp/internal/parser"
+	"github.com/juev/hledger-lsp/internal/rules"
 )
 
 func (s *Server) DocumentLink(ctx context.Context, params *protocol.DocumentLinkParams) ([]protocol.DocumentLink, error) {
@@ -19,13 +21,17 @@ func (s *Server) DocumentLink(ctx context.Context, params *protocol.DocumentLink
 		return []protocol.DocumentLink{}, nil
 	}
 
+	currentPath := uriToPath(params.TextDocument.URI)
+	currentDir := filepath.Dir(currentPath)
+
+	if filetype.IsRules(string(params.TextDocument.URI)) {
+		return rulesDocumentLinks(doc, currentDir), nil
+	}
+
 	journal, _ := parser.Parse(doc)
 	if journal == nil || len(journal.Includes) == 0 {
 		return []protocol.DocumentLink{}, nil
 	}
-
-	currentPath := uriToPath(params.TextDocument.URI)
-	currentDir := filepath.Dir(currentPath)
 
 	var links []protocol.DocumentLink
 
@@ -39,19 +45,24 @@ func (s *Server) DocumentLink(ctx context.Context, params *protocol.DocumentLink
 		target := protocol.DocumentURI("file://" + includePath)
 
 		links = append(links, protocol.DocumentLink{
-			Range: protocol.Range{
-				Start: protocol.Position{
-					Line:      uint32(inc.Range.Start.Line - 1),
-					Character: uint32(inc.Range.Start.Column - 1),
-				},
-				End: protocol.Position{
-					Line:      uint32(inc.Range.End.Line - 1),
-					Character: uint32(inc.Range.End.Column - 1),
-				},
-			},
+			Range:  *astRangeToProtocol(inc.Range),
 			Target: target,
 		})
 	}
 
 	return links, nil
+}
+
+func rulesDocumentLinks(doc, currentDir string) []protocol.DocumentLink {
+	rf, _ := rules.Parse(doc)
+	ruleLinks := rules.Links(rf, currentDir)
+	result := make([]protocol.DocumentLink, 0, len(ruleLinks))
+	for _, rl := range ruleLinks {
+		target := pathToURI(rl.Path)
+		result = append(result, protocol.DocumentLink{
+			Range:  *astRangeToProtocol(rl.Range),
+			Target: target,
+		})
+	}
+	return result
 }

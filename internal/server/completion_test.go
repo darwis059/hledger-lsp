@@ -3097,3 +3097,68 @@ func TestFindTokenEnd(t *testing.T) {
 		})
 	}
 }
+
+func TestRulesCompletion_HasTextEdit(t *testing.T) {
+	srv := NewServer()
+	content := "  acco"
+	docURI := protocol.DocumentURI("file:///test.rules")
+	srv.documents.Store(docURI, content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{URI: docURI},
+			Position:     protocol.Position{Line: 0, Character: 6},
+		},
+	}
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotEmpty(t, result.Items)
+	for _, item := range result.Items {
+		assert.NotNil(t, item.TextEdit, "item %q should have TextEdit", item.Label)
+	}
+}
+
+func TestRulesCompletion_TextEditRange(t *testing.T) {
+	srv := NewServer()
+	content := "  acco"
+	docURI := protocol.DocumentURI("file:///test.rules")
+	srv.documents.Store(docURI, content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{URI: docURI},
+			Position:     protocol.Position{Line: 0, Character: 6},
+		},
+	}
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotEmpty(t, result.Items)
+	item := result.Items[0]
+	require.NotNil(t, item.TextEdit)
+	assert.Equal(t, uint32(2), item.TextEdit.Range.Start.Character, "Start.Character should be 2 (after indent)")
+	assert.Equal(t, uint32(6), item.TextEdit.Range.End.Character, "End.Character should be 6")
+}
+
+func TestRulesCompletion_TextEditRange_TopLevel(t *testing.T) {
+	srv := NewServer()
+	content := "sep"
+	docURI := protocol.DocumentURI("file:///test.rules")
+	srv.documents.Store(docURI, content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{URI: docURI},
+			Position:     protocol.Position{Line: 0, Character: 3},
+		},
+	}
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotEmpty(t, result.Items)
+	item := result.Items[0]
+	require.NotNil(t, item.TextEdit)
+	assert.Equal(t, uint32(0), item.TextEdit.Range.Start.Character, "Start.Character should be 0")
+	assert.Equal(t, uint32(3), item.TextEdit.Range.End.Character, "End.Character should be 3")
+}

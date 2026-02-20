@@ -57,3 +57,36 @@ func TestWillSaveWaitUntil_UnknownDocument(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, edits)
 }
+
+func TestWillSaveWaitUntil_RulesFile(t *testing.T) {
+	srv := NewServer()
+	// Journal-like content that the formatter would modify if not guarded
+	content := "2024-01-15 grocery\n    expenses:food  $50\n    assets:cash   $-50"
+	uri := protocol.DocumentURI("file:///bank.rules")
+	srv.documents.Store(uri, content)
+
+	params := &protocol.WillSaveTextDocumentParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+		Reason:       protocol.TextDocumentSaveReasonManual,
+	}
+
+	edits, err := srv.WillSaveWaitUntil(context.Background(), params)
+	require.NoError(t, err)
+	assert.Nil(t, edits, "rules files should not be formatted")
+}
+
+func TestFormat_RulesFile(t *testing.T) {
+	srv := NewServer()
+	// Journal-like content that the formatter would modify if not guarded
+	content := "2024-01-15 grocery\n    expenses:food  $50\n    assets:cash   $-50"
+	uri := protocol.DocumentURI("file:///bank.rules")
+	srv.documents.Store(uri, content)
+
+	params := &protocol.DocumentFormattingParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+	}
+
+	edits, err := srv.Format(context.Background(), params)
+	require.NoError(t, err)
+	assert.Nil(t, edits, "rules files should not be formatted")
+}

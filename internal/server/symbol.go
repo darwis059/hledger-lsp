@@ -7,7 +7,9 @@ import (
 	"go.lsp.dev/protocol"
 
 	"github.com/juev/hledger-lsp/internal/ast"
+	"github.com/juev/hledger-lsp/internal/filetype"
 	"github.com/juev/hledger-lsp/internal/parser"
+	"github.com/juev/hledger-lsp/internal/rules"
 )
 
 func (s *Server) DocumentSymbol(
@@ -17,6 +19,10 @@ func (s *Server) DocumentSymbol(
 	doc, ok := s.GetDocument(params.TextDocument.URI)
 	if !ok {
 		return nil, nil
+	}
+
+	if filetype.IsRules(string(params.TextDocument.URI)) {
+		return rulesDocumentSymbols(doc), nil
 	}
 
 	journal, _ := parser.Parse(doc)
@@ -101,4 +107,20 @@ func directiveToSymbol(dir ast.Directive) protocol.DocumentSymbol {
 		Range:          rng,
 		SelectionRange: rng,
 	}
+}
+
+func rulesDocumentSymbols(doc string) []any {
+	rf, _ := rules.Parse(doc)
+	syms := rules.Symbols(rf)
+	result := make([]any, 0, len(syms))
+	for _, sym := range syms {
+		rng := *astRangeToProtocol(sym.Range)
+		result = append(result, protocol.DocumentSymbol{
+			Name:           sym.Name,
+			Kind:           protocol.SymbolKind(sym.Kind),
+			Range:          rng,
+			SelectionRange: rng,
+		})
+	}
+	return result
 }

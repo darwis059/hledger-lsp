@@ -9,8 +9,10 @@ import (
 
 	"go.lsp.dev/protocol"
 
+	"github.com/juev/hledger-lsp/internal/filetype"
 	"github.com/juev/hledger-lsp/internal/lsputil"
 	"github.com/juev/hledger-lsp/internal/parser"
+	"github.com/juev/hledger-lsp/internal/rules"
 )
 
 const (
@@ -34,6 +36,11 @@ const (
 	TokenTypeTagValue       = 12
 	TokenTypeAccountVirtual = 13
 	TokenTypeNote           = 14
+
+	// Rules file token types (index 15+)
+	TokenTypeRulesKeyword   = 15
+	TokenTypeRulesRegexp    = 16
+	TokenTypeRulesParameter = 17
 )
 
 const (
@@ -72,6 +79,10 @@ func GetSemanticTokensLegend() protocol.SemanticTokensLegend {
 			"tagValue",
 			"accountVirtual",
 			"note",
+			// Rules file types (index 15+)
+			protocol.SemanticTokenKeyword,
+			protocol.SemanticTokenRegexp,
+			protocol.SemanticTokenParameter,
 		},
 		TokenModifiers: []protocol.SemanticTokenModifiers{
 			protocol.SemanticTokenModifierDeclaration,
@@ -167,7 +178,7 @@ func (s *Server) SemanticTokensFull(ctx context.Context, params *protocol.Semant
 		return &protocol.SemanticTokens{Data: []uint32{}}, nil
 	}
 
-	tokens := tokenizeForSemantics(doc)
+	tokens := tokenizeDoc(params.TextDocument.URI, doc)
 	data := encodeTokens(tokens)
 	resultID := tokenCache.set(params.TextDocument.URI, tokens, data)
 
@@ -187,7 +198,7 @@ func (s *Server) SemanticTokensRange(ctx context.Context, params *protocol.Seman
 		return &protocol.SemanticTokens{Data: []uint32{}}, nil
 	}
 
-	allTokens := tokenizeForSemantics(doc)
+	allTokens := tokenizeDoc(params.TextDocument.URI, doc)
 	filteredTokens := filterTokensByRange(allTokens, params.Range)
 	data := encodeTokens(filteredTokens)
 
@@ -206,7 +217,7 @@ func (s *Server) SemanticTokensFullDelta(ctx context.Context, params *protocol.S
 		return &protocol.SemanticTokens{Data: []uint32{}}, nil
 	}
 
-	tokens := tokenizeForSemantics(doc)
+	tokens := tokenizeDoc(params.TextDocument.URI, doc)
 	newData := encodeTokens(tokens)
 
 	cached, ok := tokenCache.get(params.TextDocument.URI)
@@ -225,6 +236,49 @@ func (s *Server) SemanticTokensFullDelta(ctx context.Context, params *protocol.S
 		ResultID: resultID,
 		Edits:    edits,
 	}, nil
+}
+
+// tokenizeDoc dispatches to the appropriate tokenizer based on file type.
+func tokenizeDoc(uri protocol.DocumentURI, doc string) []semanticToken {
+	if filetype.IsRules(string(uri)) {
+		return tokenizeRulesForSemantics(doc)
+	}
+	return tokenizeForSemantics(doc)
+}
+
+// tokenizeRulesForSemantics converts rules semantic tokens to the server's token format.
+func tokenizeRulesForSemantics(doc string) []semanticToken {
+	ruleTokens := rules.SemanticTokens(doc)
+	tokens := make([]semanticToken, 0, len(ruleTokens))
+	for _, rt := range ruleTokens {
+		tokens = append(tokens, semanticToken{
+			line:      rt.Line,
+			col:       rt.Col,
+			length:    rt.Length,
+			tokenType: rulesTokenTypeToServer(rt.TokenType),
+			modifiers: 0,
+		})
+	}
+	return tokens
+}
+
+func rulesTokenTypeToServer(t rules.SemTokenType) uint32 {
+	switch t {
+	case rules.SemTokenKeyword:
+		return TokenTypeRulesKeyword
+	case rules.SemTokenDirective:
+		return TokenTypeDirective
+	case rules.SemTokenRegexp:
+		return TokenTypeRulesRegexp
+	case rules.SemTokenParameter:
+		return TokenTypeRulesParameter
+	case rules.SemTokenComment:
+		return TokenTypeComment
+	case rules.SemTokenString:
+		return TokenTypeString
+	default:
+		return TokenTypeString
+	}
 }
 
 func filterTokensByRange(tokens []semanticToken, r protocol.Range) []semanticToken {
