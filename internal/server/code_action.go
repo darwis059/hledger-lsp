@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"go.lsp.dev/protocol"
+
+	"github.com/juev/hledger-lsp/internal/filetype"
 )
 
 type hledgerCommand struct {
@@ -24,6 +26,10 @@ func getHledgerCommands() []hledgerCommand {
 }
 
 func (s *Server) CodeAction(ctx context.Context, params *protocol.CodeActionParams) ([]protocol.CodeAction, error) {
+	if filetype.IsRules(string(params.TextDocument.URI)) {
+		return nil, nil
+	}
+
 	actions := s.getCodeActions()
 
 	result := make([]protocol.CodeAction, 0, len(actions))

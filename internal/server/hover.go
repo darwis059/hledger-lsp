@@ -44,7 +44,7 @@ type hoverElement struct {
 }
 
 func (s *Server) Hover(ctx context.Context, params *protocol.HoverParams) (*protocol.Hover, error) {
-	doc, ok := s.GetDocument(params.TextDocument.URI)
+	doc, ok := s.getJournalDoc(params.TextDocument.URI)
 	if !ok {
 		return nil, nil
 	}
@@ -386,12 +386,12 @@ func ensureRangeEnd(rng ast.Range, name string) ast.Range {
 func astRangeToProtocol(rng ast.Range) *protocol.Range {
 	return &protocol.Range{
 		Start: protocol.Position{
-			Line:      uint32(rng.Start.Line - 1),
-			Character: uint32(rng.Start.Column - 1),
+			Line:      uint32(max(0, rng.Start.Line-1)),
+			Character: uint32(max(0, rng.Start.Column-1)),
 		},
 		End: protocol.Position{
-			Line:      uint32(rng.End.Line - 1),
-			Character: uint32(rng.End.Column - 1),
+			Line:      uint32(max(0, rng.End.Line-1)),
+			Character: uint32(max(0, rng.End.Column-1)),
 		},
 	}
 }

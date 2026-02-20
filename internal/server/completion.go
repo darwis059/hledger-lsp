@@ -10,8 +10,10 @@ import (
 	"go.lsp.dev/protocol"
 
 	"github.com/juev/hledger-lsp/internal/analyzer"
+	"github.com/juev/hledger-lsp/internal/filetype"
 	"github.com/juev/hledger-lsp/internal/lsputil"
 	"github.com/juev/hledger-lsp/internal/parser"
+	"github.com/juev/hledger-lsp/internal/rules"
 )
 
 type CompletionContextType int
@@ -36,6 +38,10 @@ func (s *Server) Completion(ctx context.Context, params *protocol.CompletionPara
 	doc, ok := s.GetDocument(params.TextDocument.URI)
 	if !ok {
 		return &protocol.CompletionList{Items: []protocol.CompletionItem{}}, nil
+	}
+
+	if filetype.IsRules(string(params.TextDocument.URI)) {
+		return s.rulesCompletion(doc, params)
 	}
 
 	var result *analyzer.AnalysisResult
@@ -1002,4 +1008,58 @@ func filterByPrefix(items []protocol.CompletionItem, query string) []scoredItem 
 		}
 	}
 	return result
+}
+
+func rulesTextEditRange(line string, lineNum, col int) *protocol.Range {
+	byteCol := lsputil.UTF16OffsetToByteOffset(line, col)
+	if byteCol > len(line) {
+		byteCol = len(line)
+	}
+	byteStart := byteCol
+	for byteStart > 0 && line[byteStart-1] != ' ' && line[byteStart-1] != '\t' {
+		byteStart--
+	}
+	return &protocol.Range{
+		Start: protocol.Position{Line: uint32(lineNum), Character: uint32(lsputil.ByteOffsetToUTF16(line, byteStart))},
+		End:   protocol.Position{Line: uint32(lineNum), Character: uint32(lsputil.ByteOffsetToUTF16(line, byteCol))},
+	}
+}
+
+func (s *Server) rulesCompletion(doc string, params *protocol.CompletionParams) (*protocol.CompletionList, error) {
+	lines := strings.Split(doc, "\n")
+	line := ""
+	lineNum := int(params.Position.Line)
+	col := int(params.Position.Character)
+	if lineNum < len(lines) {
+		line = lines[lineNum]
+	}
+
+	var workspaceAccounts []string
+	if s.workspace != nil {
+		snap := s.workspace.IndexSnapshot()
+		if snap.Accounts != nil {
+			workspaceAccounts = snap.Accounts.All
+		}
+	}
+
+	rulesItems := rules.Complete(line, col, workspaceAccounts)
+	editRange := rulesTextEditRange(line, lineNum, col)
+
+	items := make([]protocol.CompletionItem, len(rulesItems))
+	for i, ri := range rulesItems {
+		items[i] = protocol.CompletionItem{
+			Label:  ri.Label,
+			Detail: ri.Detail,
+			Kind:   protocol.CompletionItemKind(ri.Kind),
+			TextEdit: &protocol.TextEdit{
+				Range:   *editRange,
+				NewText: ri.Label,
+			},
+		}
+	}
+
+	return &protocol.CompletionList{
+		IsIncomplete: true,
+		Items:        items,
+	}, nil
 }

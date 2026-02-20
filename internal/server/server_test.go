@@ -1265,3 +1265,27 @@ func TestServer_DiagnosticsSettings(t *testing.T) {
 		}
 	})
 }
+
+func TestServer_RulesDiagnostics_PositionConversion(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///test.rules")
+
+	// "decimal-mark x" triggers INVALID_DECIMAL_MARK at the directive range.
+	// The rules lexer uses 1-based positions; analyzeRules must convert to 0-based.
+	diags, err := ts.openAndWait(uri, "decimal-mark x")
+	require.NoError(t, err)
+	require.NotEmpty(t, diags, "expected at least one diagnostic for invalid decimal-mark")
+
+	var found *protocol.Diagnostic
+	for i := range diags {
+		if diags[i].Code == "INVALID_DECIMAL_MARK" {
+			found = &diags[i]
+			break
+		}
+	}
+	require.NotNil(t, found, "expected INVALID_DECIMAL_MARK diagnostic")
+
+	assert.Equal(t, protocol.DiagnosticSeverityError, found.Severity)
+	assert.Equal(t, uint32(0), found.Range.Start.Line, "Start.Line must be 0-based")
+	assert.Equal(t, uint32(0), found.Range.Start.Character, "Start.Character must be 0-based")
+}

@@ -12,7 +12,7 @@ import (
 )
 
 func (s *Server) References(ctx context.Context, params *protocol.ReferenceParams) ([]protocol.Location, error) {
-	doc, ok := s.GetDocument(params.TextDocument.URI)
+	doc, ok := s.getJournalDoc(params.TextDocument.URI)
 	if !ok {
 		return nil, nil
 	}

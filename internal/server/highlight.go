@@ -10,7 +10,7 @@ import (
 )
 
 func (s *Server) DocumentHighlight(_ context.Context, params *protocol.DocumentHighlightParams) ([]protocol.DocumentHighlight, error) {
-	doc, ok := s.GetDocument(params.TextDocument.URI)
+	doc, ok := s.getJournalDoc(params.TextDocument.URI)
 	if !ok {
 		return nil, nil
 	}

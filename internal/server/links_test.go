@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.lsp.dev/protocol"
+	"go.lsp.dev/uri"
 )
 
 func TestDocumentLink_IncludeDirective(t *testing.T) {
@@ -78,4 +79,23 @@ func TestDocumentLink_DocumentNotFound(t *testing.T) {
 	result, err := srv.DocumentLink(context.Background(), params)
 	require.NoError(t, err)
 	assert.Nil(t, result)
+}
+
+func TestDocumentLink_RulesIncludeWithSpaces(t *testing.T) {
+	srv := NewServer()
+	content := "include /path/with spaces/other.rules\n"
+
+	rulesURI := protocol.DocumentURI("file:///home/user/test.rules")
+	srv.documents.Store(rulesURI, content)
+
+	params := &protocol.DocumentLinkParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: rulesURI},
+	}
+
+	result, err := srv.DocumentLink(context.Background(), params)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+
+	expected := string(uri.File("/path/with spaces/other.rules"))
+	assert.Equal(t, expected, string(result[0].Target))
 }

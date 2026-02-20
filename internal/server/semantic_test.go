@@ -807,3 +807,19 @@ func TestSemanticTokens_TagValueDoubleSpaceTermination(t *testing.T) {
 		})
 	}
 }
+
+func TestSemanticTokens_RulesLegendMapping(t *testing.T) {
+	legend := GetSemanticTokensLegend()
+	tokenTypes := legend.TokenTypes
+
+	require.True(t, int(TokenTypeRulesKeyword) < len(tokenTypes),
+		"TokenTypeRulesKeyword index %d out of legend bounds (%d)", TokenTypeRulesKeyword, len(tokenTypes))
+	require.True(t, int(TokenTypeRulesRegexp) < len(tokenTypes),
+		"TokenTypeRulesRegexp index %d out of legend bounds (%d)", TokenTypeRulesRegexp, len(tokenTypes))
+	require.True(t, int(TokenTypeRulesParameter) < len(tokenTypes),
+		"TokenTypeRulesParameter index %d out of legend bounds (%d)", TokenTypeRulesParameter, len(tokenTypes))
+
+	assert.Equal(t, protocol.SemanticTokenKeyword, tokenTypes[TokenTypeRulesKeyword])
+	assert.Equal(t, protocol.SemanticTokenRegexp, tokenTypes[TokenTypeRulesRegexp])
+	assert.Equal(t, protocol.SemanticTokenParameter, tokenTypes[TokenTypeRulesParameter])
+}

@@ -609,6 +609,21 @@ func TestParser_Comment(t *testing.T) {
 	require.Len(t, journal.Transactions, 1)
 }
 
+func TestParser_CommentRange(t *testing.T) {
+	input := "; this is a comment\n2024-01-15 test\n    expenses:misc  $10\n    assets:cash"
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Comments, 1)
+
+	got := journal.Comments[0].Range
+	assert.Equal(t, 1, got.Start.Line, "Range.Start.Line")
+	assert.Equal(t, 1, got.Start.Column, "Range.Start.Column")
+	assert.NotZero(t, got.End.Line, "Range.End.Line should be set")
+	assert.NotZero(t, got.End.Column, "Range.End.Column should be set")
+	// "; this is a comment" is 19 chars → End.Column = 20
+	assert.Equal(t, 20, got.End.Column, "Range.End.Column")
+}
+
 func TestParser_HashComment(t *testing.T) {
 	t.Run("top-level hash comment before transaction", func(t *testing.T) {
 		input := `# This is a hash comment

@@ -1146,9 +1146,12 @@ func (p *Parser) parseYearDirective(startPos Position) ast.Directive {
 
 func (p *Parser) parseComment() ast.Comment {
 	comment := ast.Comment{
-		Text:  p.current.Value,
-		Range: ast.Range{Start: toASTPosition(p.current.Pos)},
-		Tags:  parseTags(p.current.Value, p.current.Pos),
+		Text: p.current.Value,
+		Range: ast.Range{
+			Start: toASTPosition(p.current.Pos),
+			End:   toASTPosition(p.current.End),
+		},
+		Tags: parseTags(p.current.Value, p.current.Pos),
 	}
 	p.advance()
 	return comment
