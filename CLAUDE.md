@@ -85,3 +85,15 @@ This ensures continuity between sessions and clear visibility of what's done and
 - Decimal arithmetic via `shopspring/decimal`
 - LSP protocol via `go.lsp.dev/protocol` and `go.lsp.dev/jsonrpc2`
 - All user-visible error messages (parser errors, analyzer diagnostics, loader errors) must be human-readable. Do not expose internal token type names, AST node types, or other implementation details in error messages.
+
+### Unicode
+
+Account names, descriptions and comments may contain CJK, Cyrillic, emoji and other multi-byte characters. Use `utf8.RuneCountInString` (not `len`) for display-width calculations, and `lsputil.UTF16Len` for LSP column offsets. Every new feature that touches text must include tests with non-ASCII (CJK, Cyrillic) input.
+
+### Line Endings (LF / CRLF)
+
+Windows editors send documents with `\r\n`. The server normalizes all line endings to `\n` at ingestion (`DidOpen`, `DidChange`) via `normalizeLineEndings`. All downstream code (lexer, parser, formatter, mapper) assumes `\n`-only input. When adding new document ingestion paths, always apply `normalizeLineEndings`. Tests for any text-processing feature must include a CRLF variant to prevent regressions.
+
+### Whitespace Normalization in Formatter
+
+The formatter owns canonical whitespace: `"; "` prefix for comments, indent size for postings, 2+ spaces between account and amount. Input may contain arbitrary spacing (e.g. `;date:`, `;  date:`). The formatter must trim/normalize before writing, so that repeated formatting is idempotent (format(format(x)) == format(x)). Any new formatting rule must have an idempotency test.
