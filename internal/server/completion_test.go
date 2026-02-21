@@ -3162,3 +3162,160 @@ func TestRulesCompletion_TextEditRange_TopLevel(t *testing.T) {
 	assert.Equal(t, uint32(0), item.TextEdit.Range.Start.Character, "Start.Character should be 0")
 	assert.Equal(t, uint32(3), item.TextEdit.Range.End.Character, "End.Character should be 3")
 }
+
+func TestCompletion_DigitTriggerOnEmptyLine(t *testing.T) {
+	srv := NewServer()
+	content := `2024-01-10 Apple
+    expenses:food  $50
+    assets:cash
+
+2`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 1},
+		},
+		Context: &protocol.CompletionContext{
+			TriggerKind:      protocol.CompletionTriggerKindTriggerCharacter,
+			TriggerCharacter: "2",
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, len(result.Items) > 0, "digit trigger should produce date completions")
+
+	details := extractDetails(result.Items)
+	assert.Contains(t, details, "today")
+	assert.Contains(t, details, "yesterday")
+	assert.Contains(t, details, "tomorrow")
+}
+
+func TestCompletion_DigitTriggerPartialYear(t *testing.T) {
+	srv := NewServer()
+	content := `2024-01-10 Apple
+    expenses:food  $50
+    assets:cash
+
+202`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 3},
+		},
+		Context: &protocol.CompletionContext{
+			TriggerKind:      protocol.CompletionTriggerKindTriggerCharacter,
+			TriggerCharacter: "2",
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, len(result.Items) > 0, "digit trigger on partial year should produce date completions")
+
+	details := extractDetails(result.Items)
+	assert.Contains(t, details, "today")
+
+	for _, item := range result.Items {
+		assert.Equal(t, protocol.CompletionItemKindConstant, item.Kind,
+			"all items should be date (Constant) kind, got: %s", item.Label)
+	}
+}
+
+func TestCompletion_DigitTriggerInPostingDoesNotReturnDates(t *testing.T) {
+	srv := NewServer()
+	content := `2024-01-10 Apple
+    expenses:food  $5
+    assets:cash`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 1, Character: 20},
+		},
+		Context: &protocol.CompletionContext{
+			TriggerKind:      protocol.CompletionTriggerKindTriggerCharacter,
+			TriggerCharacter: "5",
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	details := extractDetails(result.Items)
+	assert.NotContains(t, details, "today", "digit trigger in posting amount area should not show dates")
+}
+
+func TestCompletion_DigitTriggerInPayeeArea(t *testing.T) {
+	srv := NewServer()
+	content := `2024-01-10 3`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 0, Character: 12},
+		},
+		Context: &protocol.CompletionContext{
+			TriggerKind:      protocol.CompletionTriggerKindTriggerCharacter,
+			TriggerCharacter: "3",
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	details := extractDetails(result.Items)
+	assert.NotContains(t, details, "today", "digit trigger in payee area should not show dates")
+}
+
+func TestCompletion_DigitTriggerOnEmptyDocument(t *testing.T) {
+	srv := NewServer()
+	content := `2`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 0, Character: 1},
+		},
+		Context: &protocol.CompletionContext{
+			TriggerKind:      protocol.CompletionTriggerKindTriggerCharacter,
+			TriggerCharacter: "2",
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, len(result.Items) > 0, "digit trigger on empty document should produce date completions")
+
+	details := extractDetails(result.Items)
+	assert.Contains(t, details, "today")
+	assert.Contains(t, details, "yesterday")
+	assert.Contains(t, details, "tomorrow")
+}
