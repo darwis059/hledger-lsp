@@ -1378,3 +1378,144 @@ func TestFormatDocument_CJKWithInlineComment(t *testing.T) {
 	assert.Equal(t, result, result2,
 		"double formatting with CJK accounts must be idempotent")
 }
+
+func TestFormatDocument_QuotedCommodityPreserved(t *testing.T) {
+	input := `2024-01-15 buy ETF
+    assets:broker  10 "VWCE"
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, `10 "VWCE"`,
+		"quoted commodity must preserve quotes after formatting")
+}
+
+func TestFormatDocument_UnquotedCommodityNoQuotes(t *testing.T) {
+	input := `2024-01-15 test
+    expenses:food  10 USD
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "10 USD",
+		"unquoted commodity must not get quotes")
+	assert.NotContains(t, result, `"USD"`,
+		"unquoted commodity must not get quotes")
+}
+
+func TestFormatDocument_QuotedCommodityIdempotent(t *testing.T) {
+	input := `2024-01-15 buy ETF
+    assets:broker  10 "VWCE"
+    assets:cash`
+
+	journal1, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits1 := FormatDocument(journal1, input)
+	result1 := applyEdits(input, edits1)
+
+	journal2, errs := parser.Parse(result1)
+	require.Empty(t, errs)
+
+	edits2 := FormatDocument(journal2, result1)
+	result2 := applyEdits(result1, edits2)
+
+	assert.Equal(t, result1, result2,
+		"formatting quoted commodity must be idempotent")
+	assert.Contains(t, result2, `"VWCE"`,
+		"quotes must survive round-trip")
+}
+
+func TestFormatDocument_QuotedCommodityMultiWord(t *testing.T) {
+	input := `2024-01-15 buy items
+    assets:items  3 "Chocolate Frogs"
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, `3 "Chocolate Frogs"`,
+		"multi-word quoted commodity must preserve quotes")
+}
+
+func TestFormatDocument_QuotedPrefixCommodity(t *testing.T) {
+	input := `2024-01-15 buy ETF
+    assets:broker  "VWCE" 10
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, `"VWCE"`,
+		"prefix quoted commodity must preserve quotes")
+}
+
+func TestFormatDocument_QuotedCommodityCRLF(t *testing.T) {
+	input := "2024-01-15 buy ETF\r\n    assets:broker  10 \"VWCE\"\r\n    assets:cash\r\n"
+	normalized := strings.ReplaceAll(input, "\r\n", "\n")
+
+	journal, errs := parser.Parse(normalized)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	edits := FormatDocument(journal, normalized)
+	result := applyEdits(normalized, edits)
+
+	assert.Contains(t, result, `10 "VWCE"`,
+		"quoted commodity must preserve quotes in CRLF input")
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+
+	assert.Equal(t, result, result2,
+		"CRLF quoted commodity formatting must be idempotent")
+}
+
+func TestFormatDocument_MixedQuotedAndUnquotedAlignment(t *testing.T) {
+	input := `2024-01-15 portfolio
+    assets:broker       10 "VWCE"
+    assets:checking     $-1000
+    expenses:fees       5 USD`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, `"VWCE"`,
+		"quoted commodity must preserve quotes in mixed transaction")
+	assert.Contains(t, result, "USD",
+		"unquoted commodity must remain unquoted")
+	assert.NotContains(t, result, `"USD"`,
+		"unquoted commodity must not gain quotes")
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+
+	assert.Equal(t, result, result2,
+		"mixed quoted/unquoted alignment must be idempotent")
+}

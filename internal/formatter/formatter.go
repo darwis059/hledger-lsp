@@ -287,7 +287,7 @@ func calculateAmountCostLen(posting *ast.Posting, commodityFormats map[string]Co
 
 func calculateSingleAmountLen(amount *ast.Amount, commodityFormats map[string]CommodityFormat) int {
 	_, spaceBetween := resolveCommodityDisplay(amount, commodityFormats)
-	symbolLen := utf8.RuneCountInString(amount.Commodity.Symbol)
+	symbolLen := utf8.RuneCountInString(commoditySymbolDisplay(&amount.Commodity))
 	qtyLen := utf8.RuneCountInString(formatAmountQuantity(amount, commodityFormats))
 	length := qtyLen
 
@@ -394,20 +394,28 @@ func resolveCommodityDisplay(amount *ast.Amount, commodityFormats map[string]Com
 	return position, spaceBetween
 }
 
+func commoditySymbolDisplay(c *ast.Commodity) string {
+	if c.Quoted {
+		return `"` + c.Symbol + `"`
+	}
+	return c.Symbol
+}
+
 func writeAmountWithSign(sb *strings.Builder, amount *ast.Amount, commodityFormats map[string]CommodityFormat) {
 	qty := formatAmountQuantity(amount, commodityFormats)
 	position, spaceBetween := resolveCommodityDisplay(amount, commodityFormats)
+	symbol := commoditySymbolDisplay(&amount.Commodity)
 
 	if position == ast.CommodityLeft {
 		if amount.SignBeforeCommodity && len(qty) > 0 && (qty[0] == '-' || qty[0] == '+') {
 			sb.WriteByte(qty[0])
-			sb.WriteString(amount.Commodity.Symbol)
+			sb.WriteString(symbol)
 			if spaceBetween {
 				sb.WriteString(" ")
 			}
 			sb.WriteString(qty[1:])
 		} else {
-			sb.WriteString(amount.Commodity.Symbol)
+			sb.WriteString(symbol)
 			if spaceBetween {
 				sb.WriteString(" ")
 			}
@@ -415,11 +423,11 @@ func writeAmountWithSign(sb *strings.Builder, amount *ast.Amount, commodityForma
 		}
 	} else {
 		sb.WriteString(qty)
-		if amount.Commodity.Symbol != "" {
+		if symbol != "" {
 			if spaceBetween {
 				sb.WriteString(" ")
 			}
-			sb.WriteString(amount.Commodity.Symbol)
+			sb.WriteString(symbol)
 		}
 	}
 }

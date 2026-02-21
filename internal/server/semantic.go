@@ -380,7 +380,7 @@ func tokenizeForSemantics(content string) []semanticToken {
 
 		modifiers := uint32(0)
 		if inDirective && (directiveType == "account" || directiveType == "commodity") {
-			if tok.Type == parser.TokenAccount || tok.Type == parser.TokenCommodity || tok.Type == parser.TokenText {
+			if tok.Type == parser.TokenAccount || tok.Type == parser.TokenCommodity || tok.Type == parser.TokenQuotedCommodity || tok.Type == parser.TokenText {
 				modifiers = 1 << ModifierDeclaration
 			}
 		}
@@ -412,6 +412,9 @@ func tokenizeForSemantics(content string) []semanticToken {
 		length := uint32(lsputil.UTF16Len(tok.Value))
 		if tok.Type == parser.TokenComment {
 			length++
+		}
+		if tok.Type == parser.TokenQuotedCommodity {
+			length += 2 // surrounding double quotes
 		}
 
 		tokens = append(tokens, semanticToken{
@@ -524,7 +527,7 @@ func mapTokenType(t parser.TokenType) (uint32, bool) {
 		return TokenTypeAccount, true
 	case parser.TokenNumber:
 		return TokenTypeAmount, true
-	case parser.TokenCommodity:
+	case parser.TokenCommodity, parser.TokenQuotedCommodity:
 		return TokenTypeCommodity, true
 	case parser.TokenComment:
 		return TokenTypeComment, true

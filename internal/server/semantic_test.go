@@ -823,3 +823,20 @@ func TestSemanticTokens_RulesLegendMapping(t *testing.T) {
 	assert.Equal(t, protocol.SemanticTokenRegexp, tokenTypes[TokenTypeRulesRegexp])
 	assert.Equal(t, protocol.SemanticTokenParameter, tokenTypes[TokenTypeRulesParameter])
 }
+
+func TestSemanticTokens_QuotedCommodityLength(t *testing.T) {
+	content := "2024-01-15 buy ETF\n    assets:broker  10 \"VWCE\""
+	tokens := tokenizeForSemantics(content)
+
+	var commodityToken *semanticToken
+	for i := range tokens {
+		if tokens[i].tokenType == TokenTypeCommodity && tokens[i].line == 1 {
+			commodityToken = &tokens[i]
+			break
+		}
+	}
+	require.NotNil(t, commodityToken, "commodity token not found")
+	// "VWCE" is 6 characters including quotes
+	assert.Equal(t, uint32(6), commodityToken.length,
+		"quoted commodity length must include surrounding quotes")
+}

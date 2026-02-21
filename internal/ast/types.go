@@ -117,6 +117,7 @@ type Amount struct {
 
 type Commodity struct {
 	Symbol   string
+	Quoted   bool
 	Position CommodityPosition
 	Range    Range
 }

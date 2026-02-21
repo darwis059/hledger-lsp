@@ -446,7 +446,7 @@ func (p *Parser) parsePosting() *ast.Posting {
 		p.advance()
 	}
 
-	if p.current.Type == TokenCommodity || p.current.Type == TokenNumber || p.current.Type == TokenSign {
+	if isCommodityToken(p.current.Type) || p.current.Type == TokenNumber || p.current.Type == TokenSign {
 		amount := p.parseAmount()
 		if amount != nil {
 			posting.Amount = amount
@@ -483,9 +483,10 @@ func (p *Parser) parseAmount() *ast.Amount {
 		p.advance()
 	}
 
-	if p.current.Type == TokenCommodity {
+	if isCommodityToken(p.current.Type) {
 		amount.Commodity = ast.Commodity{
 			Symbol:   p.current.Value,
+			Quoted:   p.current.Type == TokenQuotedCommodity,
 			Position: ast.CommodityLeft,
 			Range: ast.Range{
 				Start: toASTPosition(p.current.Pos),
@@ -529,11 +530,12 @@ func (p *Parser) parseAmount() *ast.Amount {
 	p.advance()
 
 	if amount.Commodity.Symbol == "" {
-		isCommodity := p.current.Type == TokenCommodity ||
+		isCommodity := isCommodityToken(p.current.Type) ||
 			(p.current.Type == TokenText && isValidCommodityText(p.current.Value))
 		if isCommodity {
 			amount.Commodity = ast.Commodity{
 				Symbol:   p.current.Value,
+				Quoted:   p.current.Type == TokenQuotedCommodity,
 				Position: ast.CommodityRight,
 				Range: ast.Range{
 					Start: toASTPosition(p.current.Pos),
@@ -669,11 +671,15 @@ func (p *Parser) parseCommodityDirective(startPos Position) ast.Directive {
 
 	// Handle inline format: "commodity $1000.00" (symbol first, then number)
 	switch p.current.Type {
-	case TokenCommodity:
+	case TokenCommodity, TokenQuotedCommodity:
 		symbol := p.current.Value
 		dir.Commodity = ast.Commodity{
 			Symbol: symbol,
-			Range:  ast.Range{Start: toASTPosition(p.current.Pos)},
+			Quoted: p.current.Type == TokenQuotedCommodity,
+			Range: ast.Range{
+				Start: toASTPosition(p.current.Pos),
+				End:   toASTPosition(p.current.End),
+			},
 		}
 		p.advance()
 
@@ -687,10 +693,14 @@ func (p *Parser) parseCommodityDirective(startPos Position) ast.Directive {
 		number := p.current.Value
 		p.advance()
 
-		if p.current.Type == TokenCommodity || p.current.Type == TokenText {
+		if isCommodityToken(p.current.Type) || p.current.Type == TokenText {
 			dir.Commodity = ast.Commodity{
 				Symbol: p.current.Value,
-				Range:  ast.Range{Start: toASTPosition(p.current.Pos)},
+				Quoted: p.current.Type == TokenQuotedCommodity,
+				Range: ast.Range{
+					Start: toASTPosition(p.current.Pos),
+					End:   toASTPosition(p.current.End),
+				},
 			}
 			dir.Format = number + " " + p.current.Value
 			p.advance()
@@ -698,7 +708,10 @@ func (p *Parser) parseCommodityDirective(startPos Position) ast.Directive {
 	case TokenText:
 		dir.Commodity = ast.Commodity{
 			Symbol: p.current.Value,
-			Range:  ast.Range{Start: toASTPosition(p.current.Pos)},
+			Range: ast.Range{
+				Start: toASTPosition(p.current.Pos),
+				End:   toASTPosition(p.current.End),
+			},
 		}
 		p.advance()
 	}
@@ -759,10 +772,14 @@ func (p *Parser) parsePriceDirective(startPos Position) ast.Directive {
 	}
 	dir.Date = *date
 
-	if p.current.Type == TokenCommodity || p.current.Type == TokenText {
+	if isCommodityToken(p.current.Type) || p.current.Type == TokenText {
 		dir.Commodity = ast.Commodity{
 			Symbol: p.current.Value,
-			Range:  ast.Range{Start: toASTPosition(p.current.Pos)},
+			Quoted: p.current.Type == TokenQuotedCommodity,
+			Range: ast.Range{
+				Start: toASTPosition(p.current.Pos),
+				End:   toASTPosition(p.current.End),
+			},
 		}
 		p.advance()
 	} else {
@@ -830,7 +847,7 @@ func (p *Parser) parseSubdirectives() map[string]string {
 		var value strings.Builder
 		for p.current.Type != TokenNewline && p.current.Type != TokenEOF && p.current.Type != TokenComment {
 			value.WriteString(p.current.Value)
-			if p.current.Type == TokenNumber || p.current.Type == TokenCommodity || p.current.Type == TokenText {
+			if p.current.Type == TokenNumber || isCommodityToken(p.current.Type) || p.current.Type == TokenText {
 				value.WriteString(" ")
 			}
 			p.advance()
@@ -849,7 +866,7 @@ func (p *Parser) parseDefaultCommodityDirective(startPos Position) ast.Directive
 
 	// Handle "D $1,000.00" (symbol first, then number)
 	switch p.current.Type {
-	case TokenCommodity:
+	case TokenCommodity, TokenQuotedCommodity:
 		symbol := p.current.Value
 		dir.Symbol = symbol
 		p.advance()
@@ -863,7 +880,7 @@ func (p *Parser) parseDefaultCommodityDirective(startPos Position) ast.Directive
 		number := p.current.Value
 		p.advance()
 
-		if p.current.Type == TokenCommodity || p.current.Type == TokenText {
+		if isCommodityToken(p.current.Type) || p.current.Type == TokenText {
 			dir.Symbol = p.current.Value
 			dir.Format = number + " " + p.current.Value
 			p.advance()
@@ -880,7 +897,7 @@ func (p *Parser) parseDecimalMarkDirective(startPos Position) ast.Directive {
 		Range: ast.Range{Start: toASTPosition(startPos)},
 	}
 
-	if p.current.Type != TokenText && p.current.Type != TokenCommodity {
+	if p.current.Type != TokenText && !isCommodityToken(p.current.Type) {
 		p.error("expected decimal mark (. or ,)")
 		p.skipToNextLine()
 		return nil
@@ -1012,7 +1029,7 @@ func (p *Parser) parseAliasDirective(startPos Position) ast.Directive {
 
 func (p *Parser) parseApplyDirective(_ Position) ast.Directive {
 	// Expect "account" after "apply"
-	if p.current.Type != TokenText && p.current.Type != TokenCommodity && p.current.Type != TokenAccount {
+	if p.current.Type != TokenText && !isCommodityToken(p.current.Type) && p.current.Type != TokenAccount {
 		p.error("expected 'account' after 'apply'")
 		p.skipToNextLine()
 		return nil
@@ -1064,7 +1081,7 @@ func (p *Parser) parseCommentBlock(_ Position) ast.Directive {
 			p.advance()
 			// Check if the next token is "comment"
 			if (p.current.Type == TokenText || p.current.Type == TokenAccount ||
-				p.current.Type == TokenDirective || p.current.Type == TokenCommodity) &&
+				p.current.Type == TokenDirective || isCommodityToken(p.current.Type)) &&
 				strings.TrimSpace(p.current.Value) == "comment" {
 				// Found "end comment", skip to next line and return
 				p.skipToNextLine()
@@ -1082,7 +1099,7 @@ func (p *Parser) parseCommentBlock(_ Position) ast.Directive {
 
 func (p *Parser) parseEndDirective(_ Position) ast.Directive {
 	// Check what we're ending
-	if p.current.Type == TokenText || p.current.Type == TokenDirective || p.current.Type == TokenAccount || p.current.Type == TokenCommodity {
+	if p.current.Type == TokenText || p.current.Type == TokenDirective || p.current.Type == TokenAccount || isCommodityToken(p.current.Type) {
 		endType := strings.TrimSpace(p.current.Value)
 		switch endType {
 		case "comment":
@@ -1094,7 +1111,7 @@ func (p *Parser) parseEndDirective(_ Position) ast.Directive {
 		case "apply":
 			// Handle "end apply account"
 			p.advance()
-			if p.current.Type == TokenText || p.current.Type == TokenCommodity || p.current.Type == TokenAccount {
+			if p.current.Type == TokenText || isCommodityToken(p.current.Type) || p.current.Type == TokenAccount {
 				if strings.TrimSpace(p.current.Value) == "account" {
 					// Pop from stack
 					if len(p.accountPrefixes) > 0 {
@@ -1386,6 +1403,10 @@ func removeSeparator(s string, sep byte) string {
 		}
 	}
 	return b.String()
+}
+
+func isCommodityToken(t TokenType) bool {
+	return t == TokenCommodity || t == TokenQuotedCommodity
 }
 
 func isValidCommodityText(value string) bool {

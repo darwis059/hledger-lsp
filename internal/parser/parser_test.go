@@ -2434,3 +2434,113 @@ func TestParser_VirtualPostingsWithPermissiveNames(t *testing.T) {
 	assert.Equal(t, ast.VirtualUnbalanced, tx.Postings[4].Virtual)
 	assert.Equal(t, "tracking:note", tx.Postings[4].Account.Name)
 }
+
+func TestParser_QuotedCommodity(t *testing.T) {
+	t.Run("suffix quoted commodity", func(t *testing.T) {
+		input := "2024-01-15 buy ETF\n    assets:broker  10 \"VWCE\"\n    assets:cash\n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs)
+		require.Len(t, journal.Transactions, 1)
+
+		tx := journal.Transactions[0]
+		require.Len(t, tx.Postings, 2)
+
+		p1 := tx.Postings[0]
+		require.NotNil(t, p1.Amount)
+		assert.Equal(t, "VWCE", p1.Amount.Commodity.Symbol)
+		assert.True(t, p1.Amount.Commodity.Quoted)
+		assert.Equal(t, ast.CommodityRight, p1.Amount.Commodity.Position)
+	})
+
+	t.Run("prefix quoted commodity", func(t *testing.T) {
+		input := "2024-01-15 buy ETF\n    assets:broker  \"VWCE\" 10\n    assets:cash\n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs)
+		require.Len(t, journal.Transactions, 1)
+
+		tx := journal.Transactions[0]
+		require.Len(t, tx.Postings, 2)
+
+		p1 := tx.Postings[0]
+		require.NotNil(t, p1.Amount)
+		assert.Equal(t, "VWCE", p1.Amount.Commodity.Symbol)
+		assert.True(t, p1.Amount.Commodity.Quoted)
+		assert.Equal(t, ast.CommodityLeft, p1.Amount.Commodity.Position)
+	})
+
+	t.Run("unquoted commodity stays Quoted=false", func(t *testing.T) {
+		input := "2024-01-15 test\n    expenses:food  10 USD\n    assets:cash\n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs)
+		require.Len(t, journal.Transactions, 1)
+
+		p1 := journal.Transactions[0].Postings[0]
+		require.NotNil(t, p1.Amount)
+		assert.Equal(t, "USD", p1.Amount.Commodity.Symbol)
+		assert.False(t, p1.Amount.Commodity.Quoted)
+	})
+
+	t.Run("multi-word quoted commodity", func(t *testing.T) {
+		input := "2024-01-15 buy items\n    assets:items  3 \"Chocolate Frogs\"\n    assets:cash\n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs)
+		require.Len(t, journal.Transactions, 1)
+
+		p1 := journal.Transactions[0].Postings[0]
+		require.NotNil(t, p1.Amount)
+		assert.Equal(t, "Chocolate Frogs", p1.Amount.Commodity.Symbol)
+		assert.True(t, p1.Amount.Commodity.Quoted)
+	})
+
+	t.Run("quoted commodity in cost", func(t *testing.T) {
+		input := "2024-01-15 buy ETF\n    assets:broker  10 \"VWCE\" @ $100\n    assets:cash\n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs)
+		require.Len(t, journal.Transactions, 1)
+
+		p1 := journal.Transactions[0].Postings[0]
+		require.NotNil(t, p1.Amount)
+		assert.Equal(t, "VWCE", p1.Amount.Commodity.Symbol)
+		assert.True(t, p1.Amount.Commodity.Quoted)
+	})
+
+	t.Run("quoted commodity in price directive", func(t *testing.T) {
+		input := "P 2024-01-15 \"VWCE\" $100\n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs)
+		require.Len(t, journal.Directives, 1)
+
+		pd, ok := journal.Directives[0].(ast.PriceDirective)
+		require.True(t, ok)
+		assert.Equal(t, "VWCE", pd.Commodity.Symbol)
+		assert.True(t, pd.Commodity.Quoted)
+	})
+
+	t.Run("quoted commodity in commodity directive", func(t *testing.T) {
+		input := "commodity \"VWCE\"\n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs)
+		require.Len(t, journal.Directives, 1)
+
+		cd, ok := journal.Directives[0].(ast.CommodityDirective)
+		require.True(t, ok)
+		assert.Equal(t, "VWCE", cd.Commodity.Symbol)
+		assert.True(t, cd.Commodity.Quoted)
+	})
+
+	t.Run("quoted commodity in balance assertion", func(t *testing.T) {
+		input := "2024-01-15 buy ETF\n    assets:broker  10 \"VWCE\" = 10 \"VWCE\"\n    assets:cash\n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs)
+		require.Len(t, journal.Transactions, 1)
+
+		p1 := journal.Transactions[0].Postings[0]
+		require.NotNil(t, p1.Amount)
+		assert.Equal(t, "VWCE", p1.Amount.Commodity.Symbol)
+		assert.True(t, p1.Amount.Commodity.Quoted)
+
+		require.NotNil(t, p1.BalanceAssertion)
+		assert.Equal(t, "VWCE", p1.BalanceAssertion.Amount.Commodity.Symbol)
+		assert.True(t, p1.BalanceAssertion.Amount.Commodity.Quoted)
+	})
+}

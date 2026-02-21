@@ -421,7 +421,7 @@ func (l *Lexer) scanQuotedCommodity() Token {
 		l.advance()
 	}
 
-	return Token{Type: TokenCommodity, Value: value, Pos: startPos, End: l.position()}
+	return Token{Type: TokenQuotedCommodity, Value: value, Pos: startPos, End: l.position()}
 }
 
 func (l *Lexer) scanAt() Token {

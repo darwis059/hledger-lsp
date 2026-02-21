@@ -27,9 +27,10 @@ const (
 	TokenPipe
 	TokenColon
 	TokenSemicolon
-	TokenSign     // + or - before commodity symbol
-	TokenTilde    // ~ for periodic transactions
-	TokenAutoRule // = for auto posting rules at line start
+	TokenSign            // + or - before commodity symbol
+	TokenTilde           // ~ for periodic transactions
+	TokenAutoRule        // = for auto posting rules at line start
+	TokenQuotedCommodity // commodity in double quotes, e.g. "VWCE"
 )
 
 type Position struct {
@@ -51,7 +52,7 @@ func (t TokenType) String() string {
 		"Text", "Account", "Number", "Commodity", "Comment",
 		"Directive", "Tag", "At", "AtAt", "Equals", "DoubleEquals",
 		"LParen", "RParen", "LBracket", "RBracket", "Pipe", "Colon", "Semicolon",
-		"Sign", "Tilde", "AutoRule",
+		"Sign", "Tilde", "AutoRule", "QuotedCommodity",
 	}
 	if int(t) < len(names) {
 		return names[t]

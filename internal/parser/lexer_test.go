@@ -360,18 +360,50 @@ func TestLexer_NegativeAmount(t *testing.T) {
 }
 
 func TestLexer_QuotedCommodity(t *testing.T) {
-	input := `    assets:items  3 "Chocolate Frogs"`
-	lexer := NewLexer(input)
-	tokens := collectTokens(lexer)
+	t.Run("multi-word quoted commodity", func(t *testing.T) {
+		input := `    assets:items  3 "Chocolate Frogs"`
+		lexer := NewLexer(input)
+		tokens := collectTokens(lexer)
 
-	expected := []Token{
-		{Type: TokenIndent, Value: "    "},
-		{Type: TokenAccount, Value: "assets:items"},
-		{Type: TokenNumber, Value: "3"},
-		{Type: TokenCommodity, Value: "Chocolate Frogs"},
-		{Type: TokenEOF},
-	}
-	assertTokenTypesAndValues(t, expected, tokens)
+		expected := []Token{
+			{Type: TokenIndent, Value: "    "},
+			{Type: TokenAccount, Value: "assets:items"},
+			{Type: TokenNumber, Value: "3"},
+			{Type: TokenQuotedCommodity, Value: "Chocolate Frogs"},
+			{Type: TokenEOF},
+		}
+		assertTokenTypesAndValues(t, expected, tokens)
+	})
+
+	t.Run("simple ticker quoted", func(t *testing.T) {
+		input := `    assets:broker  10 "VWCE"`
+		lexer := NewLexer(input)
+		tokens := collectTokens(lexer)
+
+		expected := []Token{
+			{Type: TokenIndent, Value: "    "},
+			{Type: TokenAccount, Value: "assets:broker"},
+			{Type: TokenNumber, Value: "10"},
+			{Type: TokenQuotedCommodity, Value: "VWCE"},
+			{Type: TokenEOF},
+		}
+		assertTokenTypesAndValues(t, expected, tokens)
+	})
+
+	t.Run("prefix quoted commodity", func(t *testing.T) {
+		input := `    assets:broker  "VWCE" 10`
+		lexer := NewLexer(input)
+		tokens := collectTokens(lexer)
+
+		expected := []Token{
+			{Type: TokenIndent, Value: "    "},
+			{Type: TokenAccount, Value: "assets:broker"},
+			{Type: TokenQuotedCommodity, Value: "VWCE"},
+			{Type: TokenNumber, Value: "10"},
+			{Type: TokenEOF},
+		}
+		assertTokenTypesAndValues(t, expected, tokens)
+	})
 }
 
 func TestLexer_LowercaseCommodity(t *testing.T) {
@@ -1078,7 +1110,7 @@ func TestLexer_UnterminatedTokens(t *testing.T) {
 		lexer := NewLexer(input)
 		tokens := collectTokens(lexer)
 
-		tok := findToken(tokens, TokenCommodity)
+		tok := findToken(tokens, TokenQuotedCommodity)
 		require.NotNil(t, tok)
 		assert.Equal(t, "USD", tok.Value)
 	})
@@ -1088,7 +1120,7 @@ func TestLexer_UnterminatedTokens(t *testing.T) {
 		lexer := NewLexer(input)
 		tokens := collectTokens(lexer)
 
-		tok := findToken(tokens, TokenCommodity)
+		tok := findToken(tokens, TokenQuotedCommodity)
 		require.NotNil(t, tok)
 		assert.Equal(t, "USD", tok.Value)
 	})
