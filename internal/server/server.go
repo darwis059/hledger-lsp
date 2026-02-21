@@ -208,9 +208,10 @@ func (s *Server) Exit(ctx context.Context) error {
 }
 
 func (s *Server) DidOpen(ctx context.Context, params *protocol.DidOpenTextDocumentParams) error {
-	s.documents.Store(params.TextDocument.URI, params.TextDocument.Text)
+	content := normalizeLineEndings(params.TextDocument.Text)
+	s.documents.Store(params.TextDocument.URI, content)
 	s.alignmentCache.Delete(params.TextDocument.URI)
-	go s.publishDiagnostics(ctx, params.TextDocument.URI, params.TextDocument.Text)
+	go s.publishDiagnostics(ctx, params.TextDocument.URI, content)
 	return nil
 }
 
@@ -222,9 +223,9 @@ func (s *Server) DidChange(ctx context.Context, params *protocol.DidChangeTextDo
 		}
 		for _, change := range params.ContentChanges {
 			if isFullChange(change.Range) {
-				content = change.Text
+				content = normalizeLineEndings(change.Text)
 			} else {
-				content = applyChange(content, change.Range, change.Text)
+				content = applyChange(content, change.Range, normalizeLineEndings(change.Text))
 			}
 		}
 		s.documents.Store(params.TextDocument.URI, content)
@@ -238,6 +239,12 @@ func (s *Server) DidChange(ctx context.Context, params *protocol.DidChangeTextDo
 		go s.publishDiagnostics(ctx, params.TextDocument.URI, content)
 	}
 	return nil
+}
+
+func normalizeLineEndings(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return s
 }
 
 func isFullChange(r protocol.Range) bool {

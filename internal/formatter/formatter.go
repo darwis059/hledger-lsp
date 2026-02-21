@@ -376,7 +376,7 @@ func formatPostingWithOpts(posting *ast.Posting, alignment AlignmentInfo, commod
 
 	if posting.Comment != "" {
 		sb.WriteString("  ; ")
-		sb.WriteString(posting.Comment)
+		sb.WriteString(strings.TrimLeft(posting.Comment, " \t"))
 	}
 
 	return sb.String()

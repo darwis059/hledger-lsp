@@ -1280,3 +1280,101 @@ func findAmountStartPosition(s string) int {
 	}
 	return -1
 }
+
+func TestFormatDocument_CommentIdempotency(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name: "no space before comment text",
+			input: `2024-01-15 test
+    expenses:food  $50  ;date:2026-02-21
+    assets:cash`,
+			expected: "    expenses:food  $50  ; date:2026-02-21",
+		},
+		{
+			name: "one space before comment text",
+			input: `2024-01-15 test
+    expenses:food  $50  ; date:2026-02-21
+    assets:cash`,
+			expected: "    expenses:food  $50  ; date:2026-02-21",
+		},
+		{
+			name: "two spaces before comment text (growing spaces bug)",
+			input: `2024-01-15 test
+    expenses:food  $50  ;  date:2026-02-21
+    assets:cash`,
+			expected: "    expenses:food  $50  ; date:2026-02-21",
+		},
+		{
+			name: "many spaces before comment text",
+			input: `2024-01-15 test
+    expenses:food  $50  ;    date:2026-02-21
+    assets:cash`,
+			expected: "    expenses:food  $50  ; date:2026-02-21",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			journal, errs := parser.Parse(tt.input)
+			require.Empty(t, errs)
+
+			edits := FormatDocument(journal, tt.input)
+			require.NotEmpty(t, edits)
+
+			assert.Equal(t, tt.expected, edits[0].NewText,
+				"comment formatting should normalize to single space after semicolon")
+		})
+	}
+}
+
+func TestFormatDocument_CommentDoubleFormat(t *testing.T) {
+	input := `2024-01-15 test
+    expenses:food  $50  ;date:2026-02-21
+    assets:cash`
+
+	journal1, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits1 := FormatDocument(journal1, input)
+	require.NotEmpty(t, edits1)
+	result1 := applyEdits(input, edits1)
+
+	journal2, errs := parser.Parse(result1)
+	require.Empty(t, errs)
+
+	edits2 := FormatDocument(journal2, result1)
+	result2 := applyEdits(result1, edits2)
+
+	assert.Equal(t, result1, result2,
+		"double formatting must be idempotent")
+}
+
+func TestFormatDocument_CJKWithInlineComment(t *testing.T) {
+	input := `2024-01-15 购买基金
+    资产:微信wx  $50  ;date:2026-02-21
+    资产:待报销费用bx`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "; date:2026-02-21",
+		"comment should have single space after semicolon")
+	assert.NotContains(t, result, ";  date:",
+		"comment must not have double spaces after semicolon")
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+
+	assert.Equal(t, result, result2,
+		"double formatting with CJK accounts must be idempotent")
+}

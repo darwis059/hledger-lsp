@@ -1266,6 +1266,122 @@ func TestServer_DiagnosticsSettings(t *testing.T) {
 	})
 }
 
+func TestNormalizeLineEndings(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "LF unchanged",
+			input:    "line1\nline2\nline3",
+			expected: "line1\nline2\nline3",
+		},
+		{
+			name:     "CRLF to LF",
+			input:    "line1\r\nline2\r\nline3",
+			expected: "line1\nline2\nline3",
+		},
+		{
+			name:     "bare CR to LF",
+			input:    "line1\rline2\rline3",
+			expected: "line1\nline2\nline3",
+		},
+		{
+			name:     "mixed line endings",
+			input:    "line1\r\nline2\nline3\rline4",
+			expected: "line1\nline2\nline3\nline4",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "no line endings",
+			input:    "hello",
+			expected: "hello",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := normalizeLineEndings(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestServer_DidOpen_NormalizesCRLF(t *testing.T) {
+	srv := NewServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "2024-01-15 test\r\n    expenses:food  $50  ;date:2026-02-21\r\n    assets:cash\r\n"
+
+	params := &protocol.DidOpenTextDocumentParams{
+		TextDocument: protocol.TextDocumentItem{
+			URI:  uri,
+			Text: content,
+		},
+	}
+
+	err := srv.DidOpen(context.Background(), params)
+	require.NoError(t, err)
+
+	doc, ok := srv.GetDocument(uri)
+	require.True(t, ok)
+	assert.NotContains(t, doc, "\r", "stored document should not contain CR")
+	assert.Contains(t, doc, "\n", "stored document should contain LF")
+}
+
+func TestServer_DidChange_NormalizesCRLF(t *testing.T) {
+	srv := NewServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+
+	srv.documents.Store(uri, "initial")
+
+	params := &protocol.DidChangeTextDocumentParams{
+		TextDocument: protocol.VersionedTextDocumentIdentifier{
+			TextDocumentIdentifier: protocol.TextDocumentIdentifier{URI: uri},
+		},
+		ContentChanges: []protocol.TextDocumentContentChangeEvent{
+			{
+				Range: protocol.Range{
+					Start: protocol.Position{Line: 0, Character: 0},
+					End:   protocol.Position{Line: 0, Character: 0},
+				},
+				Text: "line1\r\nline2\r\n",
+			},
+		},
+	}
+
+	err := srv.DidChange(context.Background(), params)
+	require.NoError(t, err)
+
+	doc, ok := srv.GetDocument(uri)
+	require.True(t, ok)
+	assert.NotContains(t, doc, "\r", "stored document should not contain CR after full change")
+}
+
+func TestServer_Format_CRLFDocumentNoBlankLines(t *testing.T) {
+	srv := NewServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "2024-01-15 购买基金\r\n    资产:微信wx  $50  ;date:2026-02-21\r\n    资产:待报销费用bx\r\n"
+
+	srv.documents.Store(uri, normalizeLineEndings(content))
+
+	params := &protocol.DocumentFormattingParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+	}
+
+	edits, err := srv.Format(context.Background(), params)
+	require.NoError(t, err)
+
+	for _, edit := range edits {
+		assert.NotContains(t, edit.NewText, "\r",
+			"format edits must not contain CR characters")
+	}
+}
+
 func TestServer_RulesDiagnostics_PositionConversion(t *testing.T) {
 	ts := newTestServer()
 	uri := protocol.DocumentURI("file:///test.rules")
