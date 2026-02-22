@@ -3319,3 +3319,238 @@ func TestCompletion_DigitTriggerOnEmptyDocument(t *testing.T) {
 	assert.Contains(t, details, "yesterday")
 	assert.Contains(t, details, "tomorrow")
 }
+
+func TestDetermineContext_Directive_PartialKeyword(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		col     uint32
+	}{
+		{"acc", "acc", 3},
+		{"inc", "inc", 3},
+		{"com", "com", 3},
+		{"single letter a", "a", 1},
+		{"single letter i", "i", 1},
+		{"full word account without space", "account", 7},
+		{"full word include without space", "include", 7},
+		{"D", "D", 1},
+		{"Y", "Y", 1},
+		{"P", "P", 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := determineCompletionContext(tt.content, protocol.Position{Line: 0, Character: tt.col}, nil)
+			assert.Equal(t, ContextDirective, ctx)
+		})
+	}
+}
+
+func TestDetermineContext_Directive_DoesNotAffectExistingContexts(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		line     uint32
+		col      uint32
+		expected CompletionContextType
+	}{
+		{"account directive with space", "account expenses:food", 0, 10, ContextAccount},
+		{"commodity directive with space", "commodity $", 0, 10, ContextCommodity},
+		{"empty line", "", 0, 0, ContextDate},
+		{"digit prefix", "2024-01-15 test", 0, 3, ContextDate},
+		{"indented line", "    expenses:food", 0, 10, ContextAccount},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := determineCompletionContext(tt.content, protocol.Position{Line: tt.line, Character: tt.col}, nil)
+			assert.Equal(t, tt.expected, ctx)
+		})
+	}
+}
+
+func TestDetermineContext_Directive_CommentLinesNotDirective(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		col      uint32
+		expected CompletionContextType
+	}{
+		{"semicolon comment", ";comment", 3, ContextTagName},
+		{"hash comment", "#comment", 3, ContextDate},
+		{"asterisk comment", "*comment", 3, ContextDate},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := determineCompletionContext(tt.content, protocol.Position{Line: 0, Character: tt.col}, nil)
+			assert.Equal(t, tt.expected, ctx)
+			assert.NotEqual(t, ContextDirective, ctx)
+		})
+	}
+}
+
+func TestCompletion_Directive_TypingAccProducesAccount(t *testing.T) {
+	srv := NewServer()
+	content := "acc"
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 0, Character: 3},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "account")
+	assert.NotContains(t, labels, "include")
+
+	for _, item := range result.Items {
+		if item.Label == "account" {
+			assert.Equal(t, protocol.CompletionItemKindKeyword, item.Kind)
+			assert.Equal(t, "account ", item.InsertText)
+			assert.Equal(t, "Directive", item.Detail)
+			break
+		}
+	}
+}
+
+func TestCompletion_Directive_InsertTextHasTrailingSpace(t *testing.T) {
+	srv := NewServer()
+	content := "inc"
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 0, Character: 3},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	for _, item := range result.Items {
+		if item.Label == "include" {
+			assert.Equal(t, "include ", item.InsertText)
+			return
+		}
+	}
+	t.Fatal("include not found in completion items")
+}
+
+func TestCompletion_Directive_TextEditFromColumnZero(t *testing.T) {
+	srv := NewServer()
+	content := "acc"
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 0, Character: 3},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	for _, item := range result.Items {
+		if item.Label == "account" {
+			require.NotNil(t, item.TextEdit)
+			assert.Equal(t, uint32(0), item.TextEdit.Range.Start.Character)
+			assert.Equal(t, uint32(3), item.TextEdit.Range.End.Character)
+			return
+		}
+	}
+	t.Fatal("account not found in completion items")
+}
+
+func TestCompletion_Directive_FuzzyFiltering(t *testing.T) {
+	srv := NewServer()
+	content := "com"
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 0, Character: 3},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "commodity")
+	assert.Contains(t, labels, "comment")
+	assert.NotContains(t, labels, "include")
+	assert.NotContains(t, labels, "account")
+}
+
+func TestCompletion_Directive_AllDirectivesShownOnSingleLetter(t *testing.T) {
+	srv := NewServer()
+	content := "2024-01-15 test\n    expenses:food  $50\n    assets:cash\n\na"
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 1},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "account")
+	assert.Contains(t, labels, "alias")
+	assert.Contains(t, labels, "apply account")
+}
+
+func TestCompletion_Directive_MultiWordDirective(t *testing.T) {
+	srv := NewServer()
+	content := "app"
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 0, Character: 3},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "apply account")
+}

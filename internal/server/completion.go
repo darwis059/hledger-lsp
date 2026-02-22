@@ -26,6 +26,7 @@ const (
 	ContextTagName
 	ContextTagValue
 	ContextDate
+	ContextDirective
 )
 
 const (
@@ -33,6 +34,30 @@ const (
 	directiveApplyAccount = "apply account "
 	directiveCommodity    = "commodity "
 )
+
+type directiveDef struct {
+	label      string
+	insertText string
+	detail     string
+}
+
+var directiveCompletions = []directiveDef{
+	{"account", "account ", "Directive"},
+	{"alias", "alias ", "Directive"},
+	{"apply account", "apply account ", "Directive"},
+	{"comment", "comment\n", "Directive"},
+	{"commodity", "commodity ", "Directive"},
+	{"D", "D ", "Directive"},
+	{"decimal-mark", "decimal-mark ", "Directive"},
+	{"end apply account", "end apply account\n", "Directive"},
+	{"end comment", "end comment\n", "Directive"},
+	{"include", "include ", "Directive"},
+	{"P", "P ", "Directive"},
+	{"payee", "payee ", "Directive"},
+	{"tag", "tag ", "Directive"},
+	{"Y", "Y ", "Directive"},
+	{"year", "year ", "Directive"},
+}
 
 func (s *Server) Completion(ctx context.Context, params *protocol.CompletionParams) (*protocol.CompletionList, error) {
 	doc, ok := s.GetDocument(params.TextDocument.URI)
@@ -179,6 +204,10 @@ func determineCompletionContext(content string, pos protocol.Position, ctx *prot
 			}
 		}
 		return ContextDate
+	}
+
+	if len(line) > 0 && line[0] != ';' && line[0] != '#' && line[0] != '*' {
+		return ContextDirective
 	}
 
 	return ContextDate
@@ -405,6 +434,16 @@ func (s *Server) generateCompletionItems(ctxType CompletionContextType, result *
 	case ContextDate:
 		typedPrefix := extractDateTypedPrefix(content, pos)
 		items = generateDateCompletionItems(result.Dates, content, int(pos.Line), typedPrefix)
+
+	case ContextDirective:
+		for _, d := range directiveCompletions {
+			items = append(items, protocol.CompletionItem{
+				Label:      d.label,
+				Kind:       protocol.CompletionItemKindKeyword,
+				Detail:     d.detail,
+				InsertText: d.insertText,
+			})
+		}
 
 	default:
 		for _, acc := range result.Accounts.All {
@@ -757,6 +796,8 @@ func calculateTextEditRange(content string, pos protocol.Position, ctxType Compl
 			break
 		}
 		return nil
+	case ContextDirective:
+		startByte = 0
 	default:
 		return nil
 	}
@@ -799,7 +840,7 @@ func findTokenEnd(line string, byteCol int, ctxType CompletionContextType) int {
 			end--
 		}
 		return byteCol + end
-	case ContextCommodity, ContextDate:
+	case ContextCommodity, ContextDate, ContextDirective:
 		for i := 0; i < len(rest); i++ {
 			if rest[i] == ' ' || rest[i] == '\t' {
 				return byteCol + i
@@ -892,6 +933,10 @@ func extractQueryText(content string, pos protocol.Position, ctxType CompletionC
 			return beforeCursor
 		}
 		return ""
+
+	case ContextDirective:
+		return beforeCursor
+
 	default:
 		return ""
 	}
