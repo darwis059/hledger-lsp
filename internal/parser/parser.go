@@ -1327,34 +1327,10 @@ func normalizeNumber(s string) string {
 	}
 
 	if dotCount == 0 && commaCount == 1 {
-		if lastComma >= 1 && len(s)-lastComma-1 == 3 {
-			hasNonZero := false
-			for i := 0; i < lastComma; i++ {
-				if s[i] != '0' && s[i] != '-' {
-					hasNonZero = true
-					break
-				}
-			}
-			if hasNonZero {
-				return s[:lastComma] + s[lastComma+1:]
-			}
-		}
 		return s[:lastComma] + "." + s[lastComma+1:]
 	}
 
 	if dotCount == 1 && commaCount == 0 {
-		if lastDot >= 1 && len(s)-lastDot-1 == 3 {
-			hasNonZero := false
-			for i := 0; i < lastDot; i++ {
-				if s[i] != '0' && s[i] != '-' {
-					hasNonZero = true
-					break
-				}
-			}
-			if hasNonZero {
-				return s[:lastDot] + s[lastDot+1:]
-			}
-		}
 		return s
 	}
 

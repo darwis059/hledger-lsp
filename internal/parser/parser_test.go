@@ -1578,18 +1578,18 @@ func TestParser_CommodityRange_InCostAndAssertion(t *testing.T) {
 	assert.NotZero(t, p.BalanceAssertion.Amount.Commodity.Range.End.Column, "BalanceAssertion commodity Range.End.Column should not be zero")
 }
 
-func TestParser_ThousandSeparatorSingleDot(t *testing.T) {
+func TestParser_SingleSeparatorDecimalMark(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
 		expected string
 	}{
 		{
-			name: "single dot thousand separator 3.000",
+			name: "single dot 3 digits is decimal mark 3.000",
 			input: `2024-01-15 test
     expenses:food  3.000 EUR
     assets:cash`,
-			expected: "3000",
+			expected: "3",
 		},
 		{
 			name: "single dot decimal 3.00",
@@ -1606,18 +1606,18 @@ func TestParser_ThousandSeparatorSingleDot(t *testing.T) {
 			expected: "3.5",
 		},
 		{
-			name: "single comma thousand separator 3,000",
+			name: "single comma 3 digits is decimal mark 3,000",
 			input: `2024-01-15 test
     expenses:food  3,000 EUR
     assets:cash`,
-			expected: "3000",
+			expected: "3",
 		},
 		{
-			name: "larger thousand separator 123.456",
+			name: "single dot 3 digits is decimal mark 123.456",
 			input: `2024-01-15 test
     expenses:food  123.456 EUR
     assets:cash`,
-			expected: "123456",
+			expected: "123.456",
 		},
 		{
 			name: "hundred with decimal 100.50",
@@ -1844,9 +1844,9 @@ func Test_normalizeNumber(t *testing.T) {
 		{name: "comma as decimal separator", input: "1234,56", expected: "1234.56"},
 		{name: "comma with 2 decimals", input: "12,34", expected: "12.34"},
 
-		// Single comma - thousands separator (when followed by exactly 3 digits)
-		{name: "comma as thousands with 4 digits before", input: "1,234", expected: "1234"},
-		{name: "comma as thousands with more digits", input: "12,345", expected: "12345"},
+		// Single comma with exactly 3 digits after — decimal mark per hledger spec
+		{name: "comma as decimal with 3 digits", input: "1,234", expected: "1.234"},
+		{name: "comma as decimal with 3 digits (two before)", input: "12,345", expected: "12.345"},
 
 		// Leading zeros edge case
 		{name: "leading zeros comma decimal", input: "000,50", expected: "000.50"},
@@ -1866,8 +1866,8 @@ func Test_normalizeNumber(t *testing.T) {
 		// Multiple dots only (thousands separators, European)
 		{name: "multiple dots no comma", input: "1.234.567", expected: "1234567"},
 
-		// Dot as thousands separator (when followed by exactly 3 digits)
-		{name: "dot as thousands", input: "1.234", expected: "1234"},
+		// Single dot with exactly 3 digits after — decimal mark per hledger spec
+		{name: "dot as decimal with 3 digits", input: "1.234", expected: "1.234"},
 
 		// Edge cases - trailing separators
 		{name: "trailing comma", input: "123,", expected: "123."},
@@ -1886,6 +1886,58 @@ func Test_normalizeNumber(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := normalizeNumber(tt.input)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParser_AmbiguousSingleSeparator(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		account  string
+		quantity string
+	}{
+		{
+			name:     "dot 3 digits treated as decimal mark not thousands",
+			input:    "commodity 1,000.00 CNY\n\n2024-02-18 test\n    stock  9,900.00 \"AAPL\" @ 1.000 CNY\n    assets",
+			account:  "stock",
+			quantity: "1",
+		},
+		{
+			name:     "dot 3 digits in USD",
+			input:    "2024-01-01 test\n    expenses  1.500 USD\n    assets",
+			account:  "expenses",
+			quantity: "1.5",
+		},
+		{
+			name:     "comma 2 digits in EUR",
+			input:    "2024-01-01 test\n    expenses  1,50 EUR\n    assets",
+			account:  "expenses",
+			quantity: "1.5",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			journal, errs := Parse(tt.input)
+			require.Empty(t, errs, "parsing should succeed")
+			require.NotEmpty(t, journal.Transactions)
+
+			tx := journal.Transactions[len(journal.Transactions)-1]
+			var found bool
+			for _, p := range tx.Postings {
+				if p.Account.Name == tt.account {
+					require.NotNil(t, p.Amount, "amount should not be nil for %s", tt.account)
+					if p.Cost != nil {
+						assert.Equal(t, tt.quantity, p.Cost.Amount.Quantity.String())
+					} else {
+						assert.Equal(t, tt.quantity, p.Amount.Quantity.String())
+					}
+					found = true
+					break
+				}
+			}
+			assert.True(t, found, "posting with account %q not found", tt.account)
 		})
 	}
 }
