@@ -648,18 +648,18 @@ func TestFormatDocument_PreservesSignBeforeCommodity(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "-MAU66 preserves sign before commodity",
+			name: "-MAU66 preserves sign before commodity with space",
 			input: `2024-01-15 test
     expenses:food  -MAU66
     assets:cash`,
-			expected: "    expenses:food  -MAU66",
+			expected: "    expenses:food  -MAU 66",
 		},
 		{
-			name: "MAU-66 preserves sign after commodity",
+			name: "MAU-66 preserves sign after commodity with space",
 			input: `2024-01-15 test
     expenses:food  MAU-66
     assets:cash`,
-			expected: "    expenses:food  MAU-66",
+			expected: "    expenses:food  MAU -66",
 		},
 		{
 			name: "-$100 preserves sign before symbol",
@@ -1144,8 +1144,92 @@ func TestFormatDocument_PrefixCommodityAfterBareNumber(t *testing.T) {
 
 	result := applyEdits(input, edits)
 	assert.Contains(t, result, "698,43", "bare number amount must survive formatting")
-	assert.Contains(t, result, "RUB100,00", "prefix commodity amount must survive formatting")
-	assert.Contains(t, result, "RUB11,00", "prefix commodity amount must survive formatting")
+	assert.Contains(t, result, "RUB 100,00", "prefix word commodity must have space")
+	assert.Contains(t, result, "RUB 11,00", "prefix word commodity must have space")
+}
+
+func TestFormatDocument_WordCommoditySpace(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		contains string
+	}{
+		{
+			name: "stock buy preserves spacing",
+			input: `2024-01-15 Buy stock
+    assets:brokerage  10 AAPL @ $150.00
+    assets:cash`,
+			contains: "10 AAPL",
+		},
+		{
+			name: "left-position word commodity preserves space",
+			input: `2024-01-15 test
+    expenses:food  AAPL 10
+    assets:cash`,
+			contains: "AAPL 10",
+		},
+		{
+			name: "left-position currency symbol has no space",
+			input: `2024-01-15 test
+    expenses:food  $100
+    assets:cash`,
+			contains: "$100",
+		},
+		{
+			name: "left-position multi-char currency symbol has no space",
+			input: `2024-01-15 test
+    expenses:food  AU$100
+    assets:cash`,
+			contains: "AU$100",
+		},
+		{
+			name: "USD word commodity gets space",
+			input: `2024-01-15 test
+    expenses:food  USD 100
+    assets:cash`,
+			contains: "USD 100",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			journal, errs := parser.Parse(tt.input)
+			require.Empty(t, errs, "parsing should succeed")
+			require.Len(t, journal.Transactions, 1)
+
+			edits := FormatDocument(journal, tt.input)
+			result := applyEdits(tt.input, edits)
+			assert.Contains(t, result, tt.contains)
+		})
+	}
+}
+
+func TestFormatDocument_WordCommodityIdempotency(t *testing.T) {
+	inputs := []string{
+		"2024-01-15 test\n    expenses:food  AAPL 10\n    assets:cash",
+		"2024-01-15 test\n    expenses:food  $100\n    assets:cash",
+		"2024-01-15 test\n    expenses:food  RUB 100,00\n    assets:cash",
+		"2024-01-15 test\n    expenses:food  AU$100\n    assets:cash",
+		"2024-01-15 test\n    expenses:food  10 AAPL\n    assets:cash",
+	}
+
+	for _, input := range inputs {
+		t.Run(input, func(t *testing.T) {
+			journal, errs := parser.Parse(input)
+			require.Empty(t, errs)
+
+			edits := FormatDocument(journal, input)
+			first := applyEdits(input, edits)
+
+			journal2, errs2 := parser.Parse(first)
+			require.Empty(t, errs2)
+
+			edits2 := FormatDocument(journal2, first)
+			second := applyEdits(first, edits2)
+
+			assert.Equal(t, first, second, "formatting must be idempotent")
+		})
+	}
 }
 
 func assertNoTrailingWhitespace(t *testing.T, result string) {

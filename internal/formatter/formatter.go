@@ -2,6 +2,7 @@ package formatter
 
 import (
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/shopspring/decimal"
@@ -384,7 +385,11 @@ func formatPostingWithOpts(posting *ast.Posting, alignment AlignmentInfo, commod
 
 func resolveCommodityDisplay(amount *ast.Amount, commodityFormats map[string]CommodityFormat) (position ast.CommodityPosition, spaceBetween bool) {
 	position = amount.Commodity.Position
-	spaceBetween = position == ast.CommodityRight
+	if position == ast.CommodityRight {
+		spaceBetween = true
+	} else {
+		spaceBetween = !IsSymbolCommodity(amount.Commodity.Symbol)
+	}
 
 	if commodityFormats != nil {
 		if cf, ok := commodityFormats[amount.Commodity.Symbol]; ok {
@@ -392,6 +397,17 @@ func resolveCommodityDisplay(amount *ast.Amount, commodityFormats map[string]Com
 		}
 	}
 	return position, spaceBetween
+}
+
+// IsSymbolCommodity returns true if the commodity symbol ends with a Unicode
+// currency character (Sc category), e.g. "$", "AU$", "¥". Word commodities
+// like "USD", "AAPL", "RUB" return false.
+func IsSymbolCommodity(symbol string) bool {
+	if symbol == "" {
+		return false
+	}
+	lastRune, _ := utf8.DecodeLastRuneInString(symbol)
+	return lastRune != utf8.RuneError && unicode.Is(unicode.Sc, lastRune)
 }
 
 func commoditySymbolDisplay(c *ast.Commodity) string {
