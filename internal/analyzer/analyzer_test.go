@@ -852,6 +852,26 @@ func TestAnalyzer_UndeclaredAccount_RangeCoversOnlyAccount(t *testing.T) {
 	assert.LessOrEqual(t, undeclaredDiag.Range.End.Column, 18, "diagnostic should end at account name, not include amount")
 }
 
+func TestAnalyzer_NoDiagnosticForBalanceAssertionOnlyPostings(t *testing.T) {
+	input := `2024-01-15 调整余额
+    资产:银行  1000 CNY
+    资产:现金  = 500 CNY
+    资产:钱包  = 200 CNY
+    权益:期初余额`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	a := New()
+	result := a.Analyze(journal)
+
+	for _, d := range result.Diagnostics {
+		if d.Code == "MULTIPLE_INFERRED" {
+			t.Errorf("unexpected MULTIPLE_INFERRED diagnostic for balance-assertion-only postings: %s", d.Message)
+		}
+	}
+}
+
 func TestParser_AccountWithoutColon(t *testing.T) {
 	input := `account expenses
 

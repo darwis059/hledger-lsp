@@ -49,7 +49,7 @@ func filterRealPostings(postings []ast.Posting) []ast.Posting {
 func countInferredPostings(postings []ast.Posting) (count int, lastIdx int) {
 	lastIdx = -1
 	for i, p := range postings {
-		if p.Amount == nil {
+		if p.Amount == nil && p.BalanceAssertion == nil {
 			count++
 			lastIdx = i
 		}

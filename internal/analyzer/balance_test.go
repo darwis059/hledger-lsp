@@ -259,6 +259,68 @@ func TestCheckBalance_MultiCurrencyExplicitlyBalanced(t *testing.T) {
 	assert.True(t, result.Balanced, "explicitly balanced multi-currency should be balanced")
 }
 
+func TestCheckBalance_BalanceAssertionOnly_NotCountedAsInferred(t *testing.T) {
+	input := `2024-01-15 opening balances
+    assets:bank  1000 CNY
+    assets:cash  = 500 CNY
+    assets:wallet  = 200 CNY
+    equity:opening`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0])
+
+	assert.True(t, result.Balanced, "balance-assertion-only postings should not count as inferred")
+}
+
+func TestCheckBalance_AllBalanceAssertionOnly_Balanced(t *testing.T) {
+	input := `2024-01-15 check balances
+    assets:bank  1000 CNY
+    assets:cash  = 500 CNY
+    assets:wallet  = 200 CNY
+    assets:savings  -1000 CNY`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0])
+
+	assert.True(t, result.Balanced, "all balance-assertion-only postings contribute zero, explicit amounts should balance")
+}
+
+func TestCheckBalance_BalanceAssertionPlusTwoInferred_MultipleInferred(t *testing.T) {
+	input := `2024-01-15 test
+    assets:bank  = 500 CNY
+    expenses:food
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0])
+
+	assert.False(t, result.Balanced, "two truly inferred postings should still be MULTIPLE_INFERRED even with balance assertion posting")
+}
+
+func TestCheckBalance_ExplicitAmountPlusBalanceAssertionPlusOneInferred(t *testing.T) {
+	input := `2024-01-15 test
+    expenses:food  100 CNY
+    assets:cash  = 500 CNY
+    equity:opening`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0])
+
+	assert.True(t, result.Balanced, "explicit amount + balance-assertion-only + 1 inferred should be balanced")
+}
+
 func TestCheckBalance_QuotedCommodityWithTotalCostAndBalanceAssertion(t *testing.T) {
 	input := `2024-06-01 sell stock
     assets:broker  "STOCK" - 100 @@ 5000 CNY = 0 "STOCK"
