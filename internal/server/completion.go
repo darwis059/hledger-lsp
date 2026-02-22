@@ -840,12 +840,14 @@ func findTokenEnd(line string, byteCol int, ctxType CompletionContextType) int {
 			end--
 		}
 		return byteCol + end
-	case ContextCommodity, ContextDate, ContextDirective:
+	case ContextCommodity, ContextDate:
 		for i := 0; i < len(rest); i++ {
 			if rest[i] == ' ' || rest[i] == '\t' {
 				return byteCol + i
 			}
 		}
+	case ContextDirective:
+		return len(line)
 	}
 
 	return len(line)

@@ -3641,3 +3641,40 @@ func TestCompletion_Directive_BlockDirectiveNewlineInsertText(t *testing.T) {
 	}
 	t.Fatal("comment not found in completion items")
 }
+
+func TestCompletion_Directive_TextEditCoversFullLine(t *testing.T) {
+	srv := NewServer()
+	content := "apply a"
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 0, Character: 7},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	for _, item := range result.Items {
+		if item.Label == "apply account" {
+			require.NotNil(t, item.TextEdit)
+			assert.Equal(t, uint32(0), item.TextEdit.Range.Start.Character)
+			assert.Equal(t, uint32(7), item.TextEdit.Range.End.Character,
+				"TextEdit should cover full typed text including spaces")
+			return
+		}
+	}
+	t.Fatal("apply account not found in completion items")
+}
+
+func TestCompletion_Directive_FindTokenEndScansToEndOfLine(t *testing.T) {
+	end := findTokenEnd("apply account", 5, ContextDirective)
+	assert.Equal(t, len("apply account"), end,
+		"ContextDirective findTokenEnd should scan to end of line, not stop at space")
+}
