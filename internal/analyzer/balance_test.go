@@ -258,3 +258,17 @@ func TestCheckBalance_MultiCurrencyExplicitlyBalanced(t *testing.T) {
 
 	assert.True(t, result.Balanced, "explicitly balanced multi-currency should be balanced")
 }
+
+func TestCheckBalance_QuotedCommodityWithTotalCostAndBalanceAssertion(t *testing.T) {
+	input := `2024-06-01 sell stock
+    assets:broker  "STOCK" - 100 @@ 5000 CNY = 0 "STOCK"
+    assets:cash  5000 CNY`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0])
+
+	assert.True(t, result.Balanced, "stock sale with total cost and balance assertion should be balanced")
+}

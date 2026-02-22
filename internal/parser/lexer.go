@@ -719,10 +719,14 @@ func (l *Lexer) nextIsCurrencySymbol() bool {
 }
 
 func (l *Lexer) nextIsDigit() bool {
-	if l.pos+1 >= len(l.input) {
+	pos := l.pos + 1
+	for pos < len(l.input) && l.input[pos] == ' ' {
+		pos++
+	}
+	if pos >= len(l.input) {
 		return false
 	}
-	return l.isDigit(l.input[l.pos+1])
+	return l.isDigit(l.input[pos])
 }
 
 func (l *Lexer) nextIsLetterCommodity() bool {

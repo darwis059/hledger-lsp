@@ -2544,3 +2544,43 @@ func TestParser_QuotedCommodity(t *testing.T) {
 		assert.True(t, p1.BalanceAssertion.Amount.Commodity.Quoted)
 	})
 }
+
+func TestParser_SpaceBetweenSignAndNumber(t *testing.T) {
+	t.Run("quoted commodity with negative amount and total cost and balance assertion", func(t *testing.T) {
+		input := "2024-06-01 sell stock\n    assets:broker  \"STOCK\" - 100 @@ 5000 CNY = 0 \"STOCK\"\n    assets:cash  5000 CNY\n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs)
+		require.Len(t, journal.Transactions, 1)
+
+		tx := journal.Transactions[0]
+		require.Len(t, tx.Postings, 2)
+
+		p1 := tx.Postings[0]
+		require.NotNil(t, p1.Amount)
+		assert.Equal(t, "STOCK", p1.Amount.Commodity.Symbol)
+		assert.True(t, p1.Amount.Commodity.Quoted)
+		assert.True(t, p1.Amount.Quantity.Equal(decimal.NewFromInt(-100)))
+
+		require.NotNil(t, p1.Cost)
+		assert.True(t, p1.Cost.IsTotal)
+		assert.True(t, p1.Cost.Amount.Quantity.Equal(decimal.NewFromInt(5000)))
+		assert.Equal(t, "CNY", p1.Cost.Amount.Commodity.Symbol)
+
+		require.NotNil(t, p1.BalanceAssertion)
+		assert.True(t, p1.BalanceAssertion.Amount.Quantity.Equal(decimal.NewFromInt(0)))
+		assert.Equal(t, "STOCK", p1.BalanceAssertion.Amount.Commodity.Symbol)
+		assert.True(t, p1.BalanceAssertion.Amount.Commodity.Quoted)
+	})
+
+	t.Run("simple negative with space", func(t *testing.T) {
+		input := "2024-01-15 test\n    expenses:food  - 50.00 USD\n    assets:cash\n"
+		journal, errs := Parse(input)
+		require.Empty(t, errs)
+		require.Len(t, journal.Transactions, 1)
+
+		p1 := journal.Transactions[0].Postings[0]
+		require.NotNil(t, p1.Amount)
+		assert.True(t, p1.Amount.Quantity.Equal(decimal.NewFromFloat(-50.00)))
+		assert.Equal(t, "USD", p1.Amount.Commodity.Symbol)
+	})
+}

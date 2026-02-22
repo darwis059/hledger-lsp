@@ -1992,6 +1992,63 @@ func TestLexer_PermissiveAccountNames(t *testing.T) {
 	}
 }
 
+func TestLexer_SpaceBetweenSignAndNumber(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []Token
+	}{
+		{
+			name:  "negative with space",
+			input: "    assets:cash  - 1,000.00",
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "assets:cash"},
+				{Type: TokenSign, Value: "-"},
+				{Type: TokenNumber, Value: "1,000.00"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "positive with space",
+			input: "    assets:cash  + 500",
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "assets:cash"},
+				{Type: TokenSign, Value: "+"},
+				{Type: TokenNumber, Value: "500"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "quoted commodity with negative sign and space",
+			input: `    assets:broker  "STOCK" - 100 @@ 5000 CNY = 0 "STOCK"`,
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "assets:broker"},
+				{Type: TokenQuotedCommodity, Value: "STOCK"},
+				{Type: TokenSign, Value: "-"},
+				{Type: TokenNumber, Value: "100"},
+				{Type: TokenAtAt, Value: "@@"},
+				{Type: TokenNumber, Value: "5000"},
+				{Type: TokenCommodity, Value: "CNY"},
+				{Type: TokenEquals, Value: "="},
+				{Type: TokenNumber, Value: "0"},
+				{Type: TokenQuotedCommodity, Value: "STOCK"},
+				{Type: TokenEOF},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			tokens := collectTokens(lexer)
+			assertTokenTypesAndValues(t, tt.want, tokens)
+		})
+	}
+}
+
 func TestLexer_VirtualPostingsRegression(t *testing.T) {
 	tests := []struct {
 		name  string
