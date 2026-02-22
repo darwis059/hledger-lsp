@@ -275,11 +275,9 @@ func enrichCommodityFormatsFromTransactions(formats map[string]formatter.Commodi
 			if _, ok := formats[amt.Commodity.Symbol]; ok {
 				continue
 			}
-			spaceBetween := amt.Commodity.Position == ast.CommodityRight ||
-				(amt.Commodity.Position == ast.CommodityLeft && !formatter.IsSymbolCommodity(amt.Commodity.Symbol))
 			formats[amt.Commodity.Symbol] = formatter.CommodityFormat{
 				Position:     amt.Commodity.Position,
-				SpaceBetween: spaceBetween,
+				SpaceBetween: formatter.DefaultSpaceBetween(amt.Commodity.Position, amt.Commodity.Symbol),
 			}
 		}
 	}

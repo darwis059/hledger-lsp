@@ -1205,21 +1205,24 @@ func TestFormatDocument_WordCommoditySpace(t *testing.T) {
 }
 
 func TestFormatDocument_WordCommodityIdempotency(t *testing.T) {
-	inputs := []string{
-		"2024-01-15 test\n    expenses:food  AAPL 10\n    assets:cash",
-		"2024-01-15 test\n    expenses:food  $100\n    assets:cash",
-		"2024-01-15 test\n    expenses:food  RUB 100,00\n    assets:cash",
-		"2024-01-15 test\n    expenses:food  AU$100\n    assets:cash",
-		"2024-01-15 test\n    expenses:food  10 AAPL\n    assets:cash",
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"word commodity left AAPL", "2024-01-15 test\n    expenses:food  AAPL 10\n    assets:cash"},
+		{"symbol commodity $", "2024-01-15 test\n    expenses:food  $100\n    assets:cash"},
+		{"word commodity left RUB", "2024-01-15 test\n    expenses:food  RUB 100,00\n    assets:cash"},
+		{"multi-char symbol AU$", "2024-01-15 test\n    expenses:food  AU$100\n    assets:cash"},
+		{"word commodity right AAPL", "2024-01-15 test\n    expenses:food  10 AAPL\n    assets:cash"},
 	}
 
-	for _, input := range inputs {
-		t.Run(input, func(t *testing.T) {
-			journal, errs := parser.Parse(input)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			journal, errs := parser.Parse(tt.input)
 			require.Empty(t, errs)
 
-			edits := FormatDocument(journal, input)
-			first := applyEdits(input, edits)
+			edits := FormatDocument(journal, tt.input)
+			first := applyEdits(tt.input, edits)
 
 			journal2, errs2 := parser.Parse(first)
 			require.Empty(t, errs2)
@@ -1228,6 +1231,56 @@ func TestFormatDocument_WordCommodityIdempotency(t *testing.T) {
 			second := applyEdits(first, edits2)
 
 			assert.Equal(t, first, second, "formatting must be idempotent")
+		})
+	}
+}
+
+func TestIsSymbolCommodity(t *testing.T) {
+	tests := []struct {
+		symbol   string
+		expected bool
+	}{
+		{"", false},
+		{"$", true},
+		{"¥", true},
+		{"€", true},
+		{"£", true},
+		{"AU$", true},
+		{"NZ$", true},
+		{"USD", false},
+		{"EUR", false},
+		{"AAPL", false},
+		{"BTC", false},
+		{"RUB", false},
+		{"MAU", false},
+		{"\xff", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.symbol, func(t *testing.T) {
+			assert.Equal(t, tt.expected, IsSymbolCommodity(tt.symbol))
+		})
+	}
+}
+
+func TestDefaultSpaceBetween(t *testing.T) {
+	tests := []struct {
+		name     string
+		position ast.CommodityPosition
+		symbol   string
+		expected bool
+	}{
+		{"right position always spaced", ast.CommodityRight, "AAPL", true},
+		{"right position symbol spaced", ast.CommodityRight, "$", true},
+		{"left symbol no space", ast.CommodityLeft, "$", false},
+		{"left multi-char symbol no space", ast.CommodityLeft, "AU$", false},
+		{"left word commodity spaced", ast.CommodityLeft, "USD", true},
+		{"left word commodity AAPL spaced", ast.CommodityLeft, "AAPL", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, DefaultSpaceBetween(tt.position, tt.symbol))
 		})
 	}
 }

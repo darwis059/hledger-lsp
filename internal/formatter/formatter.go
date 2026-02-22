@@ -385,11 +385,7 @@ func formatPostingWithOpts(posting *ast.Posting, alignment AlignmentInfo, commod
 
 func resolveCommodityDisplay(amount *ast.Amount, commodityFormats map[string]CommodityFormat) (position ast.CommodityPosition, spaceBetween bool) {
 	position = amount.Commodity.Position
-	if position == ast.CommodityRight {
-		spaceBetween = true
-	} else {
-		spaceBetween = !IsSymbolCommodity(amount.Commodity.Symbol)
-	}
+	spaceBetween = DefaultSpaceBetween(position, amount.Commodity.Symbol)
 
 	if commodityFormats != nil {
 		if cf, ok := commodityFormats[amount.Commodity.Symbol]; ok {
@@ -397,6 +393,16 @@ func resolveCommodityDisplay(amount *ast.Amount, commodityFormats map[string]Com
 		}
 	}
 	return position, spaceBetween
+}
+
+// DefaultSpaceBetween returns the default spacing rule for a commodity.
+// Right-position commodities always get a space. Left-position commodities
+// get a space only for word commodities (not ending with a currency symbol).
+func DefaultSpaceBetween(position ast.CommodityPosition, symbol string) bool {
+	if position == ast.CommodityRight {
+		return true
+	}
+	return !IsSymbolCommodity(symbol)
 }
 
 // IsSymbolCommodity returns true if the commodity symbol ends with a Unicode
