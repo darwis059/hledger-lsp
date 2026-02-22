@@ -206,7 +206,7 @@ func determineCompletionContext(content string, pos protocol.Position, ctx *prot
 		return ContextDate
 	}
 
-	if len(line) > 0 && line[0] != ';' && line[0] != '#' && line[0] != '*' {
+	if len(line) > 0 && line[0] != ';' && line[0] != '#' && line[0] != '*' && line[0] != '~' && line[0] != '=' {
 		return ContextDirective
 	}
 

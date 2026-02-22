@@ -3554,3 +3554,90 @@ func TestCompletion_Directive_MultiWordDirective(t *testing.T) {
 	labels := extractLabels(result.Items)
 	assert.Contains(t, labels, "apply account")
 }
+
+func TestDetermineContext_Directive_PeriodicAndAutoNotDirective(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		col     uint32
+	}{
+		{"periodic transaction", "~ monthly", 3},
+		{"auto posting rule", "= expenses", 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := determineCompletionContext(tt.content, protocol.Position{Line: 0, Character: tt.col}, nil)
+			assert.NotEqual(t, ContextDirective, ctx)
+		})
+	}
+}
+
+func TestDetermineContext_Directive_Unicode(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		col     uint32
+	}{
+		{"CJK character", "日本語", 3},
+		{"cyrillic character", "сч", 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := determineCompletionContext(tt.content, protocol.Position{Line: 0, Character: tt.col}, nil)
+			assert.Equal(t, ContextDirective, ctx)
+		})
+	}
+}
+
+func TestCompletion_Directive_CRLF(t *testing.T) {
+	srv := NewServer()
+	content := "2024-01-15 test\r\n    expenses:food  $50\r\n    assets:cash\r\n\r\nacc"
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 3},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "account")
+}
+
+func TestCompletion_Directive_BlockDirectiveNewlineInsertText(t *testing.T) {
+	srv := NewServer()
+	content := "com"
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 0, Character: 3},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	for _, item := range result.Items {
+		if item.Label == "comment" {
+			assert.Equal(t, "comment\n", item.InsertText, "block directive should have newline-terminated insertText")
+			return
+		}
+	}
+	t.Fatal("comment not found in completion items")
+}
