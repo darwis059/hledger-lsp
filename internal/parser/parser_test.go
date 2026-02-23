@@ -1961,12 +1961,15 @@ func TestParser_DecimalMarkAffectsAmountParsing(t *testing.T) {
 
 		require.NotEmpty(t, journal.Directives)
 		var priceDir ast.PriceDirective
+		found := false
 		for _, d := range journal.Directives {
 			if pd, ok := d.(ast.PriceDirective); ok {
 				priceDir = pd
+				found = true
 				break
 			}
 		}
+		require.True(t, found, "expected a PriceDirective in parsed directives")
 		assert.Equal(t, "1000.5", priceDir.Price.Quantity.String(),
 			"price directive amount should use decimal-mark for parsing")
 	})

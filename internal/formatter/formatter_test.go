@@ -1084,6 +1084,10 @@ func TestExtractCommodityFormats(t *testing.T) {
 		assert.Equal(t, '.', formats[""].DecimalMark,
 			"D directive should take priority over decimal-mark for the default format")
 		assert.Equal(t, ",", formats[""].ThousandsSep)
+		assert.False(t, formats[""].AutoPrecision,
+			"D-derived format should not have AutoPrecision")
+		assert.Equal(t, 2, formats[""].DecimalPlaces,
+			"D-derived format should preserve decimal places from format string")
 	})
 
 	t.Run("decimal-mark dot sets comma as thousands sep", func(t *testing.T) {
