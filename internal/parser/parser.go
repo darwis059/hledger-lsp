@@ -27,6 +27,7 @@ type Parser struct {
 	current         Token
 	errors          []ParseError
 	defaultYear     int
+	decimalMark     string
 	inputLen        int
 	accountPrefixes []string // stack for nested apply account directives
 }
@@ -518,7 +519,7 @@ func (p *Parser) parseAmount() *ast.Amount {
 	numberStr := rawNumberStr
 
 	numberStr = strings.ReplaceAll(numberStr, " ", "")
-	numberStr = normalizeNumber(numberStr)
+	numberStr = normalizeNumber(numberStr, p.decimalMark)
 
 	qty, err := decimal.NewFromString(numberStr)
 	if err != nil {
@@ -911,6 +912,7 @@ func (p *Parser) parseDecimalMarkDirective(startPos Position) ast.Directive {
 	}
 
 	dir.Mark = mark
+	p.decimalMark = mark
 	p.advance()
 
 	dir.Range.End = toASTPosition(p.current.Pos)
@@ -1307,7 +1309,44 @@ func toASTPosition(pos Position) ast.Position {
 	}
 }
 
-func normalizeNumber(s string) string {
+func normalizeNumberWithMark(s, decimalMark string) string {
+	var dm byte
+	if decimalMark == "," {
+		dm = ','
+	} else {
+		dm = '.'
+	}
+
+	var groupSep byte
+	if dm == ',' {
+		groupSep = '.'
+	} else {
+		groupSep = ','
+	}
+
+	var b strings.Builder
+	b.Grow(len(s))
+
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		switch ch {
+		case groupSep:
+			// skip group separator
+		case dm:
+			b.WriteByte('.')
+		default:
+			b.WriteByte(ch)
+		}
+	}
+
+	return b.String()
+}
+
+func normalizeNumber(s, decimalMark string) string {
+	if decimalMark != "" {
+		return normalizeNumberWithMark(s, decimalMark)
+	}
+
 	var dotCount, commaCount int
 	var lastDot, lastComma int
 

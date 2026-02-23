@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/shopspring/decimal"
@@ -1832,9 +1833,10 @@ func TestParser_DateEdgeCases(t *testing.T) {
 
 func Test_normalizeNumber(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		expected string
+		name        string
+		input       string
+		decimalMark string
+		expected    string
 	}{
 		// No separators
 		{name: "plain integer", input: "1234", expected: "1234"},
@@ -1880,14 +1882,94 @@ func Test_normalizeNumber(t *testing.T) {
 		// Scientific notation should pass through
 		{name: "scientific notation", input: "1E+10", expected: "1E+10"},
 		{name: "scientific lowercase", input: "1e-5", expected: "1e-5"},
+
+		// decimal-mark directive: dot as decimal mark, comma is group separator
+		{name: "dm dot: comma groups removed", input: "1,000", decimalMark: ".", expected: "1000"},
+		{name: "dm dot: comma groups with decimal", input: "1,000.50", decimalMark: ".", expected: "1000.50"},
+		{name: "dm dot: plain decimal unchanged", input: "12.34", decimalMark: ".", expected: "12.34"},
+
+		// decimal-mark directive: comma as decimal mark, dot is group separator
+		{name: "dm comma: dot groups removed", input: "1.000", decimalMark: ",", expected: "1000"},
+		{name: "dm comma: dot groups with decimal", input: "1.000,50", decimalMark: ",", expected: "1000.50"},
+		{name: "dm comma: plain comma decimal", input: "12,34", decimalMark: ",", expected: "12.34"},
+
+		// decimal-mark with empty string falls back to existing logic
+		{name: "dm empty: existing behavior comma", input: "1,234", decimalMark: "", expected: "1.234"},
+		{name: "dm empty: existing behavior dot", input: "1.234", decimalMark: "", expected: "1.234"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := normalizeNumber(tt.input)
+			result := normalizeNumber(tt.input, tt.decimalMark)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestParser_DecimalMarkAffectsAmountParsing(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		quantity string
+	}{
+		{
+			name:     "decimal-mark comma: dot is group separator",
+			input:    "decimal-mark ,\n\n2024-01-15 test\n    expenses  1.000 EUR\n    assets",
+			quantity: "1000",
+		},
+		{
+			name:     "decimal-mark dot: comma is group separator",
+			input:    "decimal-mark .\n\n2024-01-15 test\n    expenses  1,000 EUR\n    assets",
+			quantity: "1000",
+		},
+		{
+			name:     "decimal-mark comma: mixed groups and decimal",
+			input:    "decimal-mark ,\n\n2024-01-15 test\n    expenses  1.000,50 EUR\n    assets",
+			quantity: "1000.5",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			journal, errs := Parse(tt.input)
+			require.Empty(t, errs)
+			require.NotEmpty(t, journal.Transactions)
+
+			p := journal.Transactions[0].Postings[0]
+			require.NotNil(t, p.Amount)
+			assert.Equal(t, tt.quantity, p.Amount.Quantity.String())
+		})
+	}
+
+	t.Run("CRLF variant", func(t *testing.T) {
+		input := "decimal-mark ,\r\n\r\n2024-01-15 test\r\n    expenses  1.000 EUR\r\n    assets\r\n"
+		normalized := strings.ReplaceAll(input, "\r\n", "\n")
+
+		journal, errs := Parse(normalized)
+		require.Empty(t, errs)
+		require.NotEmpty(t, journal.Transactions)
+
+		p := journal.Transactions[0].Postings[0]
+		require.NotNil(t, p.Amount)
+		assert.Equal(t, "1000", p.Amount.Quantity.String())
+	})
+
+	t.Run("isolation: decimal-mark does not leak between Parse calls", func(t *testing.T) {
+		input1 := "decimal-mark ,\n\n2024-01-15 test\n    expenses  1.000 EUR\n    assets"
+		journal1, errs1 := Parse(input1)
+		require.Empty(t, errs1)
+		p1 := journal1.Transactions[0].Postings[0]
+		require.NotNil(t, p1.Amount)
+		assert.Equal(t, "1000", p1.Amount.Quantity.String())
+
+		input2 := "2024-01-15 test\n    expenses  1.000 EUR\n    assets"
+		journal2, errs2 := Parse(input2)
+		require.Empty(t, errs2)
+		p2 := journal2.Transactions[0].Postings[0]
+		require.NotNil(t, p2.Amount)
+		assert.Equal(t, "1", p2.Amount.Quantity.String(),
+			"without decimal-mark directive, 1.000 should be parsed as 1.000 (decimal)")
+	})
 }
 
 func TestParser_AmbiguousSingleSeparator(t *testing.T) {

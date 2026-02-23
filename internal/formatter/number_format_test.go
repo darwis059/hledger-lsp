@@ -247,6 +247,42 @@ func TestFormatNumber(t *testing.T) {
 			},
 			expected: "1 001",
 		},
+		{
+			name: "AutoPrecision preserves real precision of quantity",
+			qty:  decimal.RequireFromString("1000.5"),
+			format: NumberFormat{
+				DecimalMark:   ',',
+				ThousandsSep:  ".",
+				DecimalPlaces: 0,
+				HasDecimal:    true,
+				AutoPrecision: true,
+			},
+			expected: "1.000,5",
+		},
+		{
+			name: "AutoPrecision integer quantity has no decimal part",
+			qty:  decimal.RequireFromString("1000"),
+			format: NumberFormat{
+				DecimalMark:   ',',
+				ThousandsSep:  ".",
+				DecimalPlaces: 0,
+				HasDecimal:    true,
+				AutoPrecision: true,
+			},
+			expected: "1.000",
+		},
+		{
+			name: "AutoPrecision with 3 decimal places",
+			qty:  decimal.RequireFromString("42.123"),
+			format: NumberFormat{
+				DecimalMark:   '.',
+				ThousandsSep:  "",
+				DecimalPlaces: 0,
+				HasDecimal:    true,
+				AutoPrecision: true,
+			},
+			expected: "42.123",
+		},
 	}
 
 	for _, tt := range tests {

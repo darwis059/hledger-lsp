@@ -1034,6 +1034,56 @@ func TestExtractCommodityFormats(t *testing.T) {
 		assert.Equal(t, '.', formats[""].DecimalMark)
 		assert.Equal(t, ",", formats[""].ThousandsSep)
 	})
+
+	t.Run("decimal-mark directive sets fallback format", func(t *testing.T) {
+		directives := []ast.Directive{
+			ast.DecimalMarkDirective{Mark: ","},
+		}
+		formats := ExtractCommodityFormats(directives)
+		require.Contains(t, formats, "")
+		assert.Equal(t, ',', formats[""].DecimalMark)
+		assert.Equal(t, ".", formats[""].ThousandsSep)
+		assert.True(t, formats[""].AutoPrecision)
+	})
+
+	t.Run("D directive overrides decimal-mark for default key", func(t *testing.T) {
+		directives := []ast.Directive{
+			ast.DecimalMarkDirective{Mark: ","},
+			ast.DefaultCommodityDirective{Symbol: "$", Format: "$1,000.00"},
+		}
+		formats := ExtractCommodityFormats(directives)
+		require.Contains(t, formats, "")
+		assert.Equal(t, '.', formats[""].DecimalMark,
+			"D directive should override decimal-mark for the default format")
+	})
+
+	t.Run("commodity-specific format overrides decimal-mark", func(t *testing.T) {
+		directives := []ast.Directive{
+			ast.DecimalMarkDirective{Mark: ","},
+			ast.CommodityDirective{
+				Commodity: ast.Commodity{Symbol: "USD"},
+				Format:    "$1,000.00",
+			},
+		}
+		formats := ExtractCommodityFormats(directives)
+		require.Contains(t, formats, "USD")
+		assert.Equal(t, '.', formats["USD"].DecimalMark,
+			"commodity-specific format should override decimal-mark")
+		require.Contains(t, formats, "")
+		assert.Equal(t, ',', formats[""].DecimalMark,
+			"decimal-mark should still be the fallback for other commodities")
+	})
+
+	t.Run("decimal-mark dot sets comma as thousands sep", func(t *testing.T) {
+		directives := []ast.Directive{
+			ast.DecimalMarkDirective{Mark: "."},
+		}
+		formats := ExtractCommodityFormats(directives)
+		require.Contains(t, formats, "")
+		assert.Equal(t, '.', formats[""].DecimalMark)
+		assert.Equal(t, ",", formats[""].ThousandsSep)
+		assert.True(t, formats[""].AutoPrecision)
+	})
 }
 
 func TestFormatBalance(t *testing.T) {

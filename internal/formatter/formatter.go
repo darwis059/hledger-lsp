@@ -121,6 +121,7 @@ func trimTrailingSpacesEdits(content string, mapper *lsputil.PositionMapper, pos
 func ExtractCommodityFormats(directives []ast.Directive) map[string]CommodityFormat {
 	formats := make(map[string]CommodityFormat)
 	var defaultFormat *CommodityFormat
+	var decimalMarkFormat *CommodityFormat
 
 	for _, dir := range directives {
 		switch d := dir.(type) {
@@ -136,11 +137,34 @@ func ExtractCommodityFormats(directives []ast.Directive) map[string]CommodityFor
 					formats[d.Symbol] = cf
 				}
 			}
+		case ast.DecimalMarkDirective:
+			var dm rune
+			var ts string
+			if d.Mark == "," {
+				dm = ','
+				ts = "."
+			} else {
+				dm = '.'
+				ts = ","
+			}
+			cf := CommodityFormat{
+				NumberFormat: NumberFormat{
+					DecimalMark:   dm,
+					ThousandsSep:  ts,
+					HasDecimal:    true,
+					AutoPrecision: true,
+				},
+				Position:     ast.CommodityRight,
+				SpaceBetween: true,
+			}
+			decimalMarkFormat = &cf
 		}
 	}
 
 	if defaultFormat != nil {
 		formats[""] = *defaultFormat
+	} else if decimalMarkFormat != nil {
+		formats[""] = *decimalMarkFormat
 	}
 
 	return formats
