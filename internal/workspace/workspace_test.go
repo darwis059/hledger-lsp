@@ -827,7 +827,7 @@ include transactions.journal`
 		"decimal-mark from primary file should be available in workspace formats")
 	assert.Equal(t, ',', defaultFormat.DecimalMark)
 	assert.Equal(t, ".", defaultFormat.ThousandsSep)
-	assert.True(t, defaultFormat.AutoPrecision)
+	assert.Equal(t, 0, defaultFormat.DecimalPlaces)
 }
 
 func TestWorkspace_GetCommodityFormats_IncludedDDirectivePreservedWithDecimalMark(t *testing.T) {
@@ -867,6 +867,6 @@ commodity RUB
 	defaultFormat, ok := formats[""]
 	assert.True(t, ok, "D directive from included file should be preserved")
 	assert.Equal(t, ',', defaultFormat.DecimalMark)
-	assert.False(t, defaultFormat.AutoPrecision,
+	assert.Equal(t, 2, defaultFormat.DecimalPlaces,
 		"default format should come from D directive, not decimal-mark")
 }

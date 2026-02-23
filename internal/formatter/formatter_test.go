@@ -1043,7 +1043,7 @@ func TestExtractCommodityFormats(t *testing.T) {
 		require.Contains(t, formats, "")
 		assert.Equal(t, ',', formats[""].DecimalMark)
 		assert.Equal(t, ".", formats[""].ThousandsSep)
-		assert.True(t, formats[""].AutoPrecision)
+		assert.Equal(t, 0, formats[""].DecimalPlaces)
 	})
 
 	t.Run("D directive overrides decimal-mark for default key", func(t *testing.T) {
@@ -1084,8 +1084,6 @@ func TestExtractCommodityFormats(t *testing.T) {
 		assert.Equal(t, '.', formats[""].DecimalMark,
 			"D directive should take priority over decimal-mark for the default format")
 		assert.Equal(t, ",", formats[""].ThousandsSep)
-		assert.False(t, formats[""].AutoPrecision,
-			"D-derived format should not have AutoPrecision")
 		assert.Equal(t, 2, formats[""].DecimalPlaces,
 			"D-derived format should preserve decimal places from format string")
 	})
@@ -1098,8 +1096,133 @@ func TestExtractCommodityFormats(t *testing.T) {
 		require.Contains(t, formats, "")
 		assert.Equal(t, '.', formats[""].DecimalMark)
 		assert.Equal(t, ",", formats[""].ThousandsSep)
-		assert.True(t, formats[""].AutoPrecision)
+		assert.Equal(t, 0, formats[""].DecimalPlaces)
 	})
+}
+
+func TestFormatDocument_DecimalMarkPreservesTrailingZeros(t *testing.T) {
+	input := `decimal-mark .
+
+2024-01-15 grocery store
+    expenses:food  50.00 EUR
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "50.00 EUR",
+		"decimal-mark must preserve trailing zeros from user input")
+}
+
+func TestFormatDocument_DecimalMarkPreservesUserPrecision(t *testing.T) {
+	input := `decimal-mark .
+
+2024-01-15 grocery store
+    expenses:food  1234.50 EUR
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "1234.50 EUR",
+		"decimal-mark must preserve user precision (trailing .50)")
+}
+
+func TestFormatDocument_DecimalMarkWithDDirective(t *testing.T) {
+	input := `decimal-mark ,
+D 1.000,00 EUR
+
+2024-01-15 grocery store
+    expenses:food  50 EUR
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "50,00 EUR",
+		"D directive format should apply over decimal-mark fallback")
+}
+
+func TestFormatDocument_DecimalMarkWithCommodityDirective(t *testing.T) {
+	input := `decimal-mark ,
+commodity USD
+  format 1,000.00 USD
+
+2024-01-15 test
+    expenses:food  50 USD
+    expenses:rent  1234,50 EUR
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "50.00 USD",
+		"commodity-specific format applies for USD")
+	assert.Contains(t, result, "1234,50 EUR",
+		"decimal-mark fallback preserves raw quantity for EUR")
+}
+
+func TestFormatDocument_DecimalMarkIdempotency(t *testing.T) {
+	input := `decimal-mark .
+
+2024-01-15 grocery store
+    expenses:food  50.00 EUR
+    expenses:rent  1234.50 EUR
+    assets:cash`
+
+	journal1, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits1 := FormatDocument(journal1, input)
+	result1 := applyEdits(input, edits1)
+
+	journal2, errs := parser.Parse(result1)
+	require.Empty(t, errs)
+
+	edits2 := FormatDocument(journal2, result1)
+	result2 := applyEdits(result1, edits2)
+
+	assert.Equal(t, result1, result2,
+		"formatting with decimal-mark must be idempotent")
+}
+
+func TestFormatDocument_DecimalMarkCRLF(t *testing.T) {
+	input := "decimal-mark .\r\n\r\n2024-01-15 grocery store\r\n    expenses:food  50.00 EUR\r\n    assets:cash\r\n"
+	normalized := strings.ReplaceAll(input, "\r\n", "\n")
+
+	journal, errs := parser.Parse(normalized)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	edits := FormatDocument(journal, normalized)
+	result := applyEdits(normalized, edits)
+
+	assert.Contains(t, result, "50.00 EUR",
+		"decimal-mark must preserve trailing zeros in CRLF input")
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+
+	assert.Equal(t, result, result2,
+		"CRLF decimal-mark formatting must be idempotent")
 }
 
 func TestFormatBalance(t *testing.T) {

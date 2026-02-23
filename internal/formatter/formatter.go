@@ -150,10 +150,9 @@ func ExtractCommodityFormats(directives []ast.Directive) map[string]CommodityFor
 			}
 			cf := CommodityFormat{
 				NumberFormat: NumberFormat{
-					DecimalMark:   decMark,
-					ThousandsSep:  thousandsSep,
-					HasDecimal:    true,
-					AutoPrecision: true,
+					DecimalMark:  decMark,
+					ThousandsSep: thousandsSep,
+					HasDecimal:   true,
 				},
 				Position:     ast.CommodityRight,
 				SpaceBetween: true,
@@ -525,6 +524,9 @@ func formatAmountQuantity(amount *ast.Amount, commodityFormats map[string]Commod
 			return FormatNumber(amount.Quantity, cf.NumberFormat)
 		}
 		if cf, ok := commodityFormats[""]; ok {
+			if cf.DecimalPlaces == 0 && amount.RawQuantity != "" {
+				return amount.RawQuantity
+			}
 			return FormatNumber(amount.Quantity, cf.NumberFormat)
 		}
 	}

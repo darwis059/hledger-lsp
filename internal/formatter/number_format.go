@@ -60,7 +60,6 @@ type NumberFormat struct {
 	ThousandsSep  string
 	DecimalPlaces int
 	HasDecimal    bool
-	AutoPrecision bool
 }
 
 func ParseNumberFormat(formatStr string) NumberFormat {
@@ -137,10 +136,12 @@ func extractNumberPart(formatStr string) string {
 
 func FormatNumber(qty decimal.Decimal, format NumberFormat) string {
 	var str string
-	if format.AutoPrecision {
-		str = qty.String()
-	} else if format.HasDecimal {
-		str = qty.StringFixed(int32(format.DecimalPlaces))
+	if format.HasDecimal {
+		if format.DecimalPlaces > 0 {
+			str = qty.StringFixed(int32(format.DecimalPlaces))
+		} else {
+			str = qty.String()
+		}
 	} else {
 		str = qty.Round(0).String()
 	}
@@ -176,7 +177,7 @@ func FormatNumber(qty decimal.Decimal, format NumberFormat) string {
 	}
 	result.WriteString(intPart)
 
-	if format.HasDecimal && (format.DecimalPlaces > 0 || (format.AutoPrecision && len(decPart) > 0)) {
+	if format.HasDecimal && (format.DecimalPlaces > 0 || len(decPart) > 0) {
 		result.WriteRune(format.DecimalMark)
 		result.WriteString(decPart)
 	}
