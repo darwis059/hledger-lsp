@@ -2759,11 +2759,11 @@ func Test_inferDecimalMark(t *testing.T) {
 	}{
 		{"european: dot group comma decimal", "1.000,00", ","},
 		{"us: comma group dot decimal", "1,000.00", "."},
-		{"comma only", "1000,50", ","},
-		{"dot only", "1000.50", "."},
+		{"comma only: ambiguous", "1000,50", ""},
+		{"dot only: ambiguous", "1000.50", ""},
 		{"no separators", "1000", ""},
-		{"multiple dots no comma", "1.000.000", "."},
-		{"multiple commas no dot", "1,000,000", ","},
+		{"multiple dots no comma: grouping only", "1.000.000", ""},
+		{"multiple commas no dot: grouping only", "1,000,000", ""},
 	}
 
 	for _, tt := range tests {
@@ -2824,6 +2824,24 @@ func TestParser_DThenDecimalMark(t *testing.T) {
 	require.NotNil(t, p.Amount)
 	assert.Equal(t, "1.5", p.Amount.Quantity.String(),
 		"decimal-mark . after D should override D's inferred comma decimal mark")
+}
+
+func TestParser_DDirectiveAmbiguousDoesNotPoison(t *testing.T) {
+	input := "D $1000.50\n\n2024-01-15 first\n    expenses  1000.50 EUR\n    assets\n\n2024-01-16 second\n    expenses  1.000,50 EUR\n    assets"
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 2)
+
+	p1 := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p1.Amount)
+	assert.Equal(t, "1000.5", p1.Amount.Quantity.String(),
+		"ambiguous D format should not set decimal mark; 1000.50 uses heuristic → 1000.5")
+
+	p2 := journal.Transactions[1].Postings[0]
+	require.NotNil(t, p2.Amount)
+	assert.Equal(t, "1000.5", p2.Amount.Quantity.String(),
+		"ambiguous D format should not set decimal mark; 1.000,50 uses heuristic → 1000.5")
 }
 
 func TestParser_DDirectiveNoSeparators(t *testing.T) {

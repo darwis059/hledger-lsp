@@ -1322,15 +1322,15 @@ func inferDecimalMark(numberStr string) string {
 	lastDot := strings.LastIndex(numberStr, ".")
 	lastComma := strings.LastIndex(numberStr, ",")
 
+	if lastDot < 0 || lastComma < 0 {
+		return ""
+	}
+
 	if lastComma > lastDot {
 		return ","
 	}
 
-	if lastDot > lastComma {
-		return "."
-	}
-
-	return ""
+	return "."
 }
 
 func normalizeNumberWithMark(s, decimalMark string) string {
