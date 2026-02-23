@@ -2856,3 +2856,187 @@ func TestParser_DDirectiveNoSeparators(t *testing.T) {
 	assert.Equal(t, "1.5", p.Amount.Quantity.String(),
 		"D $1000 has no separators, should not infer decimal mark, fallback to heuristic")
 }
+
+func Test_inferDecimalMarkFromFormat(t *testing.T) {
+	tests := []struct {
+		name     string
+		format   string
+		expected string
+	}{
+		{"european format with commodity", "1.000,00 RUB", ","},
+		{"us format with commodity", "1,000.00 USD", "."},
+		{"currency symbol prefix", "$1,000.00", "."},
+		{"no separators", "1000 RUB", ""},
+		{"ambiguous single comma", "1000,00 EUR", ""},
+		{"ambiguous single dot", "1000.00 EUR", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := inferDecimalMarkFromFormat(tt.format)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParser_PerCommodityDecimalMark_MixedFormats(t *testing.T) {
+	input := `commodity RUB
+    format 1.000,00 RUB
+D 1.000,00 RUB
+commodity 1.000,00 USD
+commodity 1.000,00 EUR
+commodity 1000.00 CNY
+commodity 1000.00 AAPL
+
+2024-02-18 test
+    cache account                           -10.000
+    stock                                   9,900.00 "AAPL" @ 1.00 CNY
+    fees                                    100.00 CNY
+`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.NotEmpty(t, journal.Transactions)
+
+	tx := journal.Transactions[0]
+	require.Len(t, tx.Postings, 3)
+
+	// -10.000 is a bare amount → D directive says comma=decimal, dot=group → 10000
+	p0 := tx.Postings[0]
+	require.NotNil(t, p0.Amount)
+	assert.Equal(t, "-10000", p0.Amount.Quantity.String(),
+		"bare -10.000 should use D directive decimal mark: dot is group sep → 10000")
+
+	// 9,900.00 "AAPL" → AAPL has no unambiguous format → heuristic: comma before dot → dot is decimal → 9900
+	p1 := tx.Postings[1]
+	require.NotNil(t, p1.Amount)
+	assert.Equal(t, "9900", p1.Amount.Quantity.String(),
+		"9,900.00 AAPL should use heuristic (no unambiguous commodity format): comma group, dot decimal → 9900")
+
+	// 100.00 CNY → CNY has no unambiguous format → heuristic: single dot → 100
+	p2 := tx.Postings[2]
+	require.NotNil(t, p2.Amount)
+	assert.Equal(t, "100", p2.Amount.Quantity.String(),
+		"100.00 CNY should use heuristic: single dot → decimal → 100")
+}
+
+func TestParser_BareAmountUsesD_CommodityUsesOwn(t *testing.T) {
+	input := `D 1.000,00 RUB
+commodity 1,000.00 USD
+
+2024-01-15 test
+    expenses  1.500
+    income    1.500 USD
+    assets
+`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.NotEmpty(t, journal.Transactions)
+
+	tx := journal.Transactions[0]
+
+	// bare 1.500 → D says comma decimal, dot group → 1500
+	p0 := tx.Postings[0]
+	require.NotNil(t, p0.Amount)
+	assert.Equal(t, "1500", p0.Amount.Quantity.String(),
+		"bare 1.500 should use D directive: dot is group → 1500")
+
+	// 1.500 USD → commodity USD has format 1,000.00 (dot decimal) → heuristic: single dot → 1.5
+	p1 := tx.Postings[1]
+	require.NotNil(t, p1.Amount)
+	assert.Equal(t, "1.5", p1.Amount.Quantity.String(),
+		"1.500 USD should use USD commodity format (dot decimal) → heuristic single dot → 1.5")
+}
+
+func TestParser_CommodityFormatOverridesHeuristic(t *testing.T) {
+	input := `commodity 1.000,00 EUR
+
+2024-01-15 test
+    expenses  1.000 EUR
+    assets
+`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.NotEmpty(t, journal.Transactions)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.Amount)
+	assert.Equal(t, "1000", p.Amount.Quantity.String(),
+		"commodity EUR format has comma decimal → 1.000 EUR = 1000")
+}
+
+func TestParser_CommoditySubdirectiveFormat(t *testing.T) {
+	input := `commodity RUB
+    format 1.000,00 RUB
+
+2024-01-15 test
+    expenses  1.000 RUB
+    assets
+`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.NotEmpty(t, journal.Transactions)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.Amount)
+	assert.Equal(t, "1000", p.Amount.Quantity.String(),
+		"commodity RUB subdirective format has comma decimal → 1.000 RUB = 1000")
+}
+
+func TestParser_UnknownCommodityFallsToHeuristic(t *testing.T) {
+	input := `D 1.000,00 RUB
+
+2024-01-15 test
+    expenses  1.500 GBP
+    assets
+`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.NotEmpty(t, journal.Transactions)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.Amount)
+	assert.Equal(t, "1.5", p.Amount.Quantity.String(),
+		"GBP has no format → heuristic: single dot → decimal → 1.5")
+}
+
+func TestParser_ForwardRefCommodityNotAvailable(t *testing.T) {
+	input := `2024-01-15 test
+    expenses  1.000 EUR
+    assets
+
+commodity 1.000,00 EUR
+`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.NotEmpty(t, journal.Transactions)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.Amount)
+	assert.Equal(t, "1", p.Amount.Quantity.String(),
+		"commodity EUR defined after transaction → heuristic used: single dot → decimal → 1.0")
+}
+
+func TestParser_MultipleDDirectives(t *testing.T) {
+	input := `D 1,000.00 USD
+D 1.000,00 EUR
+
+2024-01-15 test
+    expenses  1.500
+    assets
+`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.NotEmpty(t, journal.Transactions)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.Amount)
+	assert.Equal(t, "1500", p.Amount.Quantity.String(),
+		"last D directive wins: comma decimal → 1.500 bare = 1500")
+}

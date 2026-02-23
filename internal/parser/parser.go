@@ -23,20 +23,22 @@ func (e ParseError) Error() string {
 }
 
 type Parser struct {
-	lexer               *Lexer
-	current             Token
-	errors              []ParseError
-	defaultYear         int
-	decimalMark         string
-	decimalMarkExplicit bool
-	inputLen            int
-	accountPrefixes     []string // stack for nested apply account directives
+	lexer                 *Lexer
+	current               Token
+	errors                []ParseError
+	defaultYear           int
+	decimalMark           string
+	decimalMarkExplicit   bool
+	commodityDecimalMarks map[string]string
+	inputLen              int
+	accountPrefixes       []string // stack for nested apply account directives
 }
 
 func Parse(input string) (*ast.Journal, []ParseError) {
 	p := &Parser{
-		lexer:    NewLexer(input),
-		inputLen: len(input),
+		lexer:                 NewLexer(input),
+		inputLen:              len(input),
+		commodityDecimalMarks: make(map[string]string),
 	}
 	p.advance()
 	return p.parseJournal(), p.errors
@@ -517,18 +519,8 @@ func (p *Parser) parseAmount() *ast.Amount {
 	if sign == "-" && !strings.HasPrefix(rawNumberStr, "-") {
 		rawNumberStr = "-" + rawNumberStr
 	}
-	numberStr := rawNumberStr
-
-	numberStr = strings.ReplaceAll(numberStr, " ", "")
-	numberStr = normalizeNumber(numberStr, p.decimalMark)
-
-	qty, err := decimal.NewFromString(numberStr)
-	if err != nil {
-		p.error("invalid number: %s", p.current.Value)
-		return nil
-	}
-	amount.Quantity = qty
 	amount.RawQuantity = rawNumberStr
+	rawTokenValue := p.current.Value
 	p.advance()
 
 	if amount.Commodity.Symbol == "" {
@@ -547,6 +539,17 @@ func (p *Parser) parseAmount() *ast.Amount {
 			p.advance()
 		}
 	}
+
+	numberStr := strings.ReplaceAll(rawNumberStr, " ", "")
+	mark := p.resolveDecimalMark(amount.Commodity.Symbol)
+	numberStr = normalizeNumber(numberStr, mark)
+
+	qty, err := decimal.NewFromString(numberStr)
+	if err != nil {
+		p.error("invalid number: %s", rawTokenValue)
+		return nil
+	}
+	amount.Quantity = qty
 
 	amount.Range.End = toASTPosition(p.current.Pos)
 	return amount
@@ -734,6 +737,12 @@ func (p *Parser) parseCommodityDirective(startPos Position) ast.Directive {
 		dir.Note = note
 	}
 
+	if dir.Format != "" && dir.Commodity.Symbol != "" {
+		if mark := inferDecimalMarkFromFormat(dir.Format); mark != "" {
+			p.commodityDecimalMarks[dir.Commodity.Symbol] = mark
+		}
+	}
+
 	dir.Range.End = toASTPosition(p.current.Pos)
 	return dir
 }
@@ -892,7 +901,10 @@ func (p *Parser) parseDefaultCommodityDirective(startPos Position) ast.Directive
 
 	if !p.decimalMarkExplicit && numberStr != "" {
 		if mark := inferDecimalMark(numberStr); mark != "" {
-			p.decimalMark = mark
+			p.commodityDecimalMarks[""] = mark
+			if dir.Symbol != "" {
+				p.commodityDecimalMarks[dir.Symbol] = mark
+			}
 		}
 	}
 
@@ -1316,6 +1328,32 @@ func toASTPosition(pos Position) ast.Position {
 		Column: pos.Column,
 		Offset: pos.Offset,
 	}
+}
+
+func (p *Parser) resolveDecimalMark(commodity string) string {
+	if p.decimalMarkExplicit {
+		return p.decimalMark
+	}
+	if commodity != "" {
+		if mark, ok := p.commodityDecimalMarks[commodity]; ok {
+			return mark
+		}
+		return ""
+	}
+	if mark, ok := p.commodityDecimalMarks[""]; ok {
+		return mark
+	}
+	return ""
+}
+
+func inferDecimalMarkFromFormat(format string) string {
+	var numberPart strings.Builder
+	for _, r := range format {
+		if r >= '0' && r <= '9' || r == '.' || r == ',' {
+			numberPart.WriteRune(r)
+		}
+	}
+	return inferDecimalMark(numberPart.String())
 }
 
 func inferDecimalMark(numberStr string) string {
