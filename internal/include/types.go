@@ -69,6 +69,9 @@ func (r *ResolvedJournal) AllDirectives() []ast.Directive {
 	return result
 }
 
+// FormatDirectives returns directives suitable for formatter commodity format extraction.
+// It excludes DecimalMarkDirective from included files because decimal-mark is file-scoped
+// per hledger semantics, while primary file directives are passed through unfiltered.
 func (r *ResolvedJournal) FormatDirectives() []ast.Directive {
 	var result []ast.Directive
 	if r.Primary != nil {

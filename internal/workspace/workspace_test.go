@@ -829,3 +829,44 @@ include transactions.journal`
 	assert.Equal(t, ".", defaultFormat.ThousandsSep)
 	assert.True(t, defaultFormat.AutoPrecision)
 }
+
+func TestWorkspace_GetCommodityFormats_IncludedDDirectivePreservedWithDecimalMark(t *testing.T) {
+	t.Setenv("LEDGER_FILE", "")
+	t.Setenv("HLEDGER_JOURNAL", "")
+
+	tmpDir := t.TempDir()
+
+	mainPath := filepath.Join(tmpDir, "main.journal")
+	mainContent := `include common.journal`
+	err := os.WriteFile(mainPath, []byte(mainContent), 0644)
+	require.NoError(t, err)
+
+	commonPath := filepath.Join(tmpDir, "common.journal")
+	commonContent := `decimal-mark ,
+
+D 1.000,00 EUR
+
+commodity RUB
+  format 1.000,00 RUB`
+	err = os.WriteFile(commonPath, []byte(commonContent), 0644)
+	require.NoError(t, err)
+
+	loader := include.NewLoader()
+	ws := NewWorkspace(tmpDir, loader)
+
+	err = ws.Initialize()
+	require.NoError(t, err)
+
+	formats := ws.GetCommodityFormats()
+	require.NotNil(t, formats)
+
+	rubFormat, ok := formats["RUB"]
+	assert.True(t, ok, "commodity directive from included file should be preserved")
+	assert.Equal(t, ',', rubFormat.DecimalMark)
+
+	defaultFormat, ok := formats[""]
+	assert.True(t, ok, "D directive from included file should be preserved")
+	assert.Equal(t, ',', defaultFormat.DecimalMark)
+	assert.False(t, defaultFormat.AutoPrecision,
+		"default format should come from D directive, not decimal-mark")
+}
