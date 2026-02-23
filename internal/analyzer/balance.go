@@ -26,8 +26,11 @@ func CheckBalance(tx *ast.Transaction) *BalanceResult {
 		return result
 	}
 
+	precisions := maxPrecisionByCommodity(realPostings)
+
 	for commodity, sum := range balances {
-		if !sum.IsZero() {
+		tolerance := toleranceForPrecision(precisions[commodity])
+		if sum.Abs().GreaterThanOrEqual(tolerance) {
 			result.Balanced = false
 			result.Differences[commodity] = sum.Abs()
 		}
@@ -55,6 +58,36 @@ func countInferredPostings(postings []ast.Posting) (count int, lastIdx int) {
 		}
 	}
 	return
+}
+
+func decimalPrecision(d decimal.Decimal) int32 {
+	exp := -d.Exponent()
+	if exp < 0 {
+		return 0
+	}
+	return exp
+}
+
+func maxPrecisionByCommodity(postings []ast.Posting) map[string]int32 {
+	precisions := make(map[string]int32)
+	for _, p := range postings {
+		if p.Amount == nil {
+			continue
+		}
+		commodity := p.Amount.Commodity.Symbol
+		if p.Cost != nil {
+			commodity = p.Cost.Amount.Commodity.Symbol
+		}
+		prec := decimalPrecision(p.Amount.Quantity)
+		if prec > precisions[commodity] {
+			precisions[commodity] = prec
+		}
+	}
+	return precisions
+}
+
+func toleranceForPrecision(precision int32) decimal.Decimal {
+	return decimal.New(5, -precision-1)
 }
 
 func sumByCommodity(postings []ast.Posting) map[string]decimal.Decimal {

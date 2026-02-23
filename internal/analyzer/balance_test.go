@@ -334,3 +334,150 @@ func TestCheckBalance_QuotedCommodityWithTotalCostAndBalanceAssertion(t *testing
 
 	assert.True(t, result.Balanced, "stock sale with total cost and balance assertion should be balanced")
 }
+
+func TestDecimalPrecision(t *testing.T) {
+	tests := []struct {
+		name      string
+		value     string
+		precision int32
+	}{
+		{"integer", "100", 0},
+		{"one decimal", "1.5", 1},
+		{"two decimals", "1.00", 2},
+		{"three decimals", "1.234", 3},
+		{"four decimals", "6.8237", 4},
+		{"zero", "0", 0},
+		{"negative", "-1.50", 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d, err := decimal.NewFromString(tt.value)
+			require.NoError(t, err)
+			assert.Equal(t, tt.precision, decimalPrecision(d))
+		})
+	}
+}
+
+func TestToleranceForPrecision(t *testing.T) {
+	tests := []struct {
+		name      string
+		precision int32
+		expected  string
+	}{
+		{"precision 0", 0, "0.5"},
+		{"precision 1", 1, "0.05"},
+		{"precision 2", 2, "0.005"},
+		{"precision 3", 3, "0.0005"},
+		{"precision 4", 4, "0.00005"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expected, err := decimal.NewFromString(tt.expected)
+			require.NoError(t, err)
+			assert.True(t, toleranceForPrecision(tt.precision).Equal(expected),
+				"toleranceForPrecision(%d) = %s, want %s", tt.precision, toleranceForPrecision(tt.precision), expected)
+		})
+	}
+}
+
+func TestCheckBalance_CostRounding_WithinTolerance(t *testing.T) {
+	// 3.00 * 0.333 = 0.999 EUR; balance = 0.999 - 1.00 = -0.001
+	// Posting amounts: 3.00 (prec 2) mapped to EUR, 1.00 (prec 2) → max 2
+	// Tolerance = 0.005; |0.001| < 0.005 → balanced
+	input := `2024-01-15 exchange
+    assets:foreign  3.00 USD @ 0.333 EUR
+    assets:eur  -1.00 EUR`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0])
+
+	assert.True(t, result.Balanced, "cost rounding 0.001 within tolerance 0.005")
+}
+
+func TestCheckBalance_CostRounding_ExceedsTolerance(t *testing.T) {
+	// 3.00 * 0.337 = 1.011 EUR; balance = 1.011 - 1.00 = 0.011
+	// Precision 2, tolerance 0.005; 0.011 > 0.005 → unbalanced
+	input := `2024-01-15 exchange
+    assets:foreign  3.00 USD @ 0.337 EUR
+    assets:eur  -1.00 EUR`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0])
+
+	assert.False(t, result.Balanced, "cost rounding 0.011 exceeds tolerance 0.005")
+}
+
+func TestCheckBalance_CostPrecisionExcluded(t *testing.T) {
+	// 3.00 * 0.333 = 0.999 EUR; balance = -0.001
+	// Cost amount 0.333 has precision 3 — if included, tolerance = 0.0005, 0.001 > 0.0005 → unbalanced
+	// Since cost precision is excluded, posting precision = 2, tolerance = 0.005, 0.001 < 0.005 → balanced
+	input := `2024-01-15 exchange
+    assets:foreign  3.00 USD @ 0.333 EUR
+    assets:eur  -1.00 EUR`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0])
+
+	assert.True(t, result.Balanced, "cost amount precision (3) must NOT tighten tolerance")
+}
+
+func TestCheckBalance_HigherPostingPrecision_TighterTolerance(t *testing.T) {
+	// 3.000 * 0.3333 = 0.9999 EUR; balance = 0.9999 - 1.000 = -0.0001
+	// Posting amounts: 3.000 (prec 3) mapped to EUR, 1.000 (prec 3) → max 3
+	// Tolerance = 0.0005; |0.0001| < 0.0005 → balanced
+	input := `2024-01-15 exchange
+    assets:foreign  3.000 USD @ 0.3333 EUR
+    assets:eur  -1.000 EUR`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0])
+
+	assert.True(t, result.Balanced, "precision 3 tolerance 0.0005; |0.0001| within tolerance")
+}
+
+func TestCheckBalance_HigherPostingPrecision_ExceedsTighterTolerance(t *testing.T) {
+	// 3.000 * 0.333 = 0.999 EUR; balance = 0.999 - 1.000 = -0.001
+	// Posting amounts: 3.000 (prec 3) mapped to EUR, 1.000 (prec 3) → max 3
+	// Tolerance = 0.0005; |0.001| > 0.0005 → unbalanced
+	input := `2024-01-15 exchange
+    assets:foreign  3.000 USD @ 0.333 EUR
+    assets:eur  -1.000 EUR`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0])
+
+	assert.False(t, result.Balanced, "precision 3 tolerance 0.0005; |0.001| exceeds tolerance")
+}
+
+func TestCheckBalance_MultiCommodity_DifferentTolerances(t *testing.T) {
+	// EUR: 3.00 * 0.333 = 0.999; balance = -0.001; prec 2, tol 0.005 → OK
+	// CHF: 3.000 * 0.3333 = 0.9999; balance = -0.0001; prec 3, tol 0.0005 → OK
+	input := `2024-01-15 exchange
+    assets:usd1  3.00 USD @ 0.333 EUR
+    assets:eur  -1.00 EUR
+    assets:usd2  3.000 GBP @ 0.3333 CHF
+    assets:chf  -1.000 CHF`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0])
+
+	assert.True(t, result.Balanced, "each commodity uses its own precision for tolerance")
+}
