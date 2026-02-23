@@ -414,12 +414,14 @@ func TestCheckBalance_CostRounding_ExceedsTolerance(t *testing.T) {
 }
 
 func TestCheckBalance_CostPrecisionExcluded(t *testing.T) {
-	// 3.00 * 0.333 = 0.999 EUR; balance = -0.001
-	// Cost amount 0.333 has precision 3 — if included, tolerance = 0.0005, 0.001 > 0.0005 → unbalanced
-	// Since cost precision is excluded, posting precision = 2, tolerance = 0.005, 0.001 < 0.005 → balanced
+	// 5 * 0.2006 = 1.003 EUR; balance = 1.003 - 1 = 0.003
+	// Posting amounts: 5 (prec 0) mapped to EUR, 1 (prec 0) → max 0
+	// Tolerance = 0.5; |0.003| < 0.5 → balanced
+	// If cost precision (4 from 0.2006) were included: max = 4, tolerance = 0.00005
+	// 0.003 > 0.00005 → would be unbalanced
 	input := `2024-01-15 exchange
-    assets:foreign  3.00 USD @ 0.333 EUR
-    assets:eur  -1.00 EUR`
+    assets:foreign  5 USD @ 0.2006 EUR
+    assets:eur  -1 EUR`
 
 	journal, errs := parser.Parse(input)
 	require.Empty(t, errs)
@@ -427,7 +429,8 @@ func TestCheckBalance_CostPrecisionExcluded(t *testing.T) {
 
 	result := CheckBalance(&journal.Transactions[0])
 
-	assert.True(t, result.Balanced, "cost amount precision (3) must NOT tighten tolerance")
+	assert.True(t, result.Balanced, "cost amount precision (4) must NOT tighten tolerance; "+
+		"posting precision 0 → tolerance 0.5, imbalance 0.003 within tolerance")
 }
 
 func TestCheckBalance_HigherPostingPrecision_TighterTolerance(t *testing.T) {
@@ -480,4 +483,23 @@ func TestCheckBalance_MultiCommodity_DifferentTolerances(t *testing.T) {
 	result := CheckBalance(&journal.Transactions[0])
 
 	assert.True(t, result.Balanced, "each commodity uses its own precision for tolerance")
+}
+
+func TestCheckBalance_MultiCommodity_OneExceedsTolerance(t *testing.T) {
+	// EUR: 3.00 * 0.333 = 0.999; balance = -0.001; prec 2, tol 0.005 → OK
+	// CHF: 3.00 * 0.337 = 1.011; balance = 0.011; prec 2, tol 0.005 → EXCEEDS
+	input := `2024-01-15 exchange
+    assets:usd1  3.00 USD @ 0.333 EUR
+    assets:eur  -1.00 EUR
+    assets:usd2  3.00 GBP @ 0.337 CHF
+    assets:chf  -1.00 CHF`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0])
+
+	assert.False(t, result.Balanced, "CHF exceeds tolerance even though EUR is within")
+	assert.Contains(t, result.Differences, "CHF")
 }

@@ -74,6 +74,9 @@ func maxPrecisionByCommodity(postings []ast.Posting) map[string]int32 {
 		if p.Amount == nil {
 			continue
 		}
+		// Map posting amount precision to the balance commodity.
+		// For cost postings, that's the cost commodity (not the posting's native commodity).
+		// Cost price precision is intentionally excluded per hledger spec.
 		commodity := p.Amount.Commodity.Symbol
 		if p.Cost != nil {
 			commodity = p.Cost.Amount.Commodity.Symbol
