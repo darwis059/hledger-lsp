@@ -283,6 +283,17 @@ func TestFormatNumber(t *testing.T) {
 			},
 			expected: "42.123",
 		},
+		{
+			name: "AutoPrecision negative number with thousands separator",
+			qty:  decimal.RequireFromString("-1000.5"),
+			format: NumberFormat{
+				DecimalMark:   ',',
+				ThousandsSep:  ".",
+				HasDecimal:    true,
+				AutoPrecision: true,
+			},
+			expected: "-1.000,5",
+		},
 	}
 
 	for _, tt := range tests {

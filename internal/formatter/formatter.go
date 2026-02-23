@@ -117,7 +117,8 @@ func trimTrailingSpacesEdits(content string, mapper *lsputil.PositionMapper, pos
 }
 
 // ExtractCommodityFormats builds a commodity symbol → format map from directives.
-// The empty string key ("") holds the default format from the D directive.
+// The empty string key ("") holds the default format from the D directive,
+// or from the decimal-mark directive as a fallback when no D directive is present.
 func ExtractCommodityFormats(directives []ast.Directive) map[string]CommodityFormat {
 	formats := make(map[string]CommodityFormat)
 	var defaultFormat *CommodityFormat
@@ -138,19 +139,19 @@ func ExtractCommodityFormats(directives []ast.Directive) map[string]CommodityFor
 				}
 			}
 		case ast.DecimalMarkDirective:
-			var dm rune
-			var ts string
+			var decMark rune
+			var thousandsSep string
 			if d.Mark == "," {
-				dm = ','
-				ts = "."
+				decMark = ','
+				thousandsSep = "."
 			} else {
-				dm = '.'
-				ts = ","
+				decMark = '.'
+				thousandsSep = ","
 			}
 			cf := CommodityFormat{
 				NumberFormat: NumberFormat{
-					DecimalMark:   dm,
-					ThousandsSep:  ts,
+					DecimalMark:   decMark,
+					ThousandsSep:  thousandsSep,
 					HasDecimal:    true,
 					AutoPrecision: true,
 				},

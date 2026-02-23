@@ -1954,6 +1954,35 @@ func TestParser_DecimalMarkAffectsAmountParsing(t *testing.T) {
 		assert.Equal(t, "1000", p.Amount.Quantity.String())
 	})
 
+	t.Run("decimal-mark comma affects price directive amount", func(t *testing.T) {
+		input := "decimal-mark ,\n\nP 2024-01-15 EUR 1.000,50 USD\n\n2024-01-15 test\n    expenses  100 EUR\n    assets"
+		journal, errs := Parse(input)
+		require.Empty(t, errs)
+
+		require.NotEmpty(t, journal.Directives)
+		var priceDir ast.PriceDirective
+		for _, d := range journal.Directives {
+			if pd, ok := d.(ast.PriceDirective); ok {
+				priceDir = pd
+				break
+			}
+		}
+		assert.Equal(t, "1000.5", priceDir.Price.Quantity.String(),
+			"price directive amount should use decimal-mark for parsing")
+	})
+
+	t.Run("decimal-mark comma affects cost annotation amount", func(t *testing.T) {
+		input := "decimal-mark ,\n\n2024-01-15 buy stock\n    assets:stock  10 AAPL @ 1.000 EUR\n    assets:bank"
+		journal, errs := Parse(input)
+		require.Empty(t, errs)
+		require.NotEmpty(t, journal.Transactions)
+
+		p := journal.Transactions[0].Postings[0]
+		require.NotNil(t, p.Cost)
+		assert.Equal(t, "1000", p.Cost.Amount.Quantity.String(),
+			"cost annotation amount should use decimal-mark for parsing")
+	})
+
 	t.Run("isolation: decimal-mark does not leak between Parse calls", func(t *testing.T) {
 		input1 := "decimal-mark ,\n\n2024-01-15 test\n    expenses  1.000 EUR\n    assets"
 		journal1, errs1 := Parse(input1)

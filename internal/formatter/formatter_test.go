@@ -1074,6 +1074,18 @@ func TestExtractCommodityFormats(t *testing.T) {
 			"decimal-mark should still be the fallback for other commodities")
 	})
 
+	t.Run("D directive declared before decimal-mark takes priority", func(t *testing.T) {
+		directives := []ast.Directive{
+			ast.DefaultCommodityDirective{Symbol: "$", Format: "$1,000.00"},
+			ast.DecimalMarkDirective{Mark: ","},
+		}
+		formats := ExtractCommodityFormats(directives)
+		require.Contains(t, formats, "")
+		assert.Equal(t, '.', formats[""].DecimalMark,
+			"D directive should take priority over decimal-mark for the default format")
+		assert.Equal(t, ",", formats[""].ThousandsSep)
+	})
+
 	t.Run("decimal-mark dot sets comma as thousands sep", func(t *testing.T) {
 		directives := []ast.Directive{
 			ast.DecimalMarkDirective{Mark: "."},
