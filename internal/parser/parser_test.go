@@ -2750,3 +2750,91 @@ func TestParser_SpaceBetweenSignAndNumber(t *testing.T) {
 		assert.Equal(t, "USD", p1.Amount.Commodity.Symbol)
 	})
 }
+
+func Test_inferDecimalMark(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"european: dot group comma decimal", "1.000,00", ","},
+		{"us: comma group dot decimal", "1,000.00", "."},
+		{"comma only", "1000,50", ","},
+		{"dot only", "1000.50", "."},
+		{"no separators", "1000", ""},
+		{"multiple dots no comma", "1.000.000", "."},
+		{"multiple commas no dot", "1,000,000", ","},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := inferDecimalMark(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParser_DDirectiveSetsDecimalMark(t *testing.T) {
+	input := "D 1.000,00 RUB\n\n2024-01-15 test\n    expenses  10.000 RUB\n    assets"
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.NotEmpty(t, journal.Transactions)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.Amount)
+	assert.Equal(t, "10000", p.Amount.Quantity.String(),
+		"D 1.000,00 RUB should set comma as decimal mark, making 10.000 = 10000")
+}
+
+func TestParser_DDirectiveSetsDecimalMarkUS(t *testing.T) {
+	input := "D $1,000.00\n\n2024-01-15 test\n    expenses  $10,000\n    assets"
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.NotEmpty(t, journal.Transactions)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.Amount)
+	assert.Equal(t, "10000", p.Amount.Quantity.String(),
+		"D $1,000.00 should set dot as decimal mark, making $10,000 = 10000")
+}
+
+func TestParser_DecimalMarkPrecedenceOverD(t *testing.T) {
+	input := "decimal-mark .\nD 1.000,00 EUR\n\n2024-01-15 test\n    expenses  1.500 EUR\n    assets"
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.NotEmpty(t, journal.Transactions)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.Amount)
+	assert.Equal(t, "1.5", p.Amount.Quantity.String(),
+		"explicit decimal-mark . should take precedence over D directive")
+}
+
+func TestParser_DThenDecimalMark(t *testing.T) {
+	input := "D 1.000,00 EUR\ndecimal-mark .\n\n2024-01-15 test\n    expenses  1.500 EUR\n    assets"
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.NotEmpty(t, journal.Transactions)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.Amount)
+	assert.Equal(t, "1.5", p.Amount.Quantity.String(),
+		"decimal-mark . after D should override D's inferred comma decimal mark")
+}
+
+func TestParser_DDirectiveNoSeparators(t *testing.T) {
+	input := "D $1000\n\n2024-01-15 test\n    expenses  $1.500\n    assets"
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.NotEmpty(t, journal.Transactions)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.Amount)
+	assert.Equal(t, "1.5", p.Amount.Quantity.String(),
+		"D $1000 has no separators, should not infer decimal mark, fallback to heuristic")
+}

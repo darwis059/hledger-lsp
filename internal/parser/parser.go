@@ -23,13 +23,14 @@ func (e ParseError) Error() string {
 }
 
 type Parser struct {
-	lexer           *Lexer
-	current         Token
-	errors          []ParseError
-	defaultYear     int
-	decimalMark     string
-	inputLen        int
-	accountPrefixes []string // stack for nested apply account directives
+	lexer               *Lexer
+	current             Token
+	errors              []ParseError
+	defaultYear         int
+	decimalMark         string
+	decimalMarkExplicit bool
+	inputLen            int
+	accountPrefixes     []string // stack for nested apply account directives
 }
 
 func Parse(input string) (*ast.Journal, []ParseError) {
@@ -865,7 +866,8 @@ func (p *Parser) parseDefaultCommodityDirective(startPos Position) ast.Directive
 		Range: ast.Range{Start: toASTPosition(startPos)},
 	}
 
-	// Handle "D $1,000.00" (symbol first, then number)
+	var numberStr string
+
 	switch p.current.Type {
 	case TokenCommodity, TokenQuotedCommodity:
 		symbol := p.current.Value
@@ -873,18 +875,24 @@ func (p *Parser) parseDefaultCommodityDirective(startPos Position) ast.Directive
 		p.advance()
 
 		if p.current.Type == TokenNumber {
-			dir.Format = symbol + p.current.Value
+			numberStr = p.current.Value
+			dir.Format = symbol + numberStr
 			p.advance()
 		}
 	case TokenNumber:
-		// Handle "D 1.000,00 EUR" (number first, then symbol)
-		number := p.current.Value
+		numberStr = p.current.Value
 		p.advance()
 
 		if isCommodityToken(p.current.Type) || p.current.Type == TokenText {
 			dir.Symbol = p.current.Value
-			dir.Format = number + " " + p.current.Value
+			dir.Format = numberStr + " " + p.current.Value
 			p.advance()
+		}
+	}
+
+	if !p.decimalMarkExplicit && numberStr != "" {
+		if mark := inferDecimalMark(numberStr); mark != "" {
+			p.decimalMark = mark
 		}
 	}
 
@@ -913,6 +921,7 @@ func (p *Parser) parseDecimalMarkDirective(startPos Position) ast.Directive {
 
 	dir.Mark = mark
 	p.decimalMark = mark
+	p.decimalMarkExplicit = true
 	p.advance()
 
 	dir.Range.End = toASTPosition(p.current.Pos)
@@ -1307,6 +1316,21 @@ func toASTPosition(pos Position) ast.Position {
 		Column: pos.Column,
 		Offset: pos.Offset,
 	}
+}
+
+func inferDecimalMark(numberStr string) string {
+	lastDot := strings.LastIndex(numberStr, ".")
+	lastComma := strings.LastIndex(numberStr, ",")
+
+	if lastComma > lastDot {
+		return ","
+	}
+
+	if lastDot > lastComma {
+		return "."
+	}
+
+	return ""
 }
 
 func normalizeNumberWithMark(s, decimalMark string) string {

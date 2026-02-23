@@ -808,7 +808,7 @@ func TestFormatDocument_DefaultFormatFallback(t *testing.T) {
 	input := `D 1 000,00 RUB
 
 2024-01-15 test
-    expenses:food  846661.89 USD
+    expenses:food  846661,89 USD
     assets:cash`
 
 	journal, errs := parser.Parse(input)
