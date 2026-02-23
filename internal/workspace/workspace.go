@@ -483,7 +483,7 @@ func (w *Workspace) GetCommodityFormats() map[string]formatter.CommodityFormat {
 		return nil
 	}
 
-	w.cachedFormats = formatter.ExtractCommodityFormats(w.resolved.AllDirectives())
+	w.cachedFormats = formatter.ExtractCommodityFormats(w.resolved.FormatDirectives())
 	return w.cachedFormats
 }
 

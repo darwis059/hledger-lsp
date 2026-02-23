@@ -763,3 +763,69 @@ include transactions.journal`
 	assert.Equal(t, ".", defaultFormat.ThousandsSep)
 	assert.Equal(t, 2, defaultFormat.DecimalPlaces)
 }
+
+func TestWorkspace_GetCommodityFormats_DecimalMarkScopeCurrentFileOnly(t *testing.T) {
+	t.Setenv("LEDGER_FILE", "")
+	t.Setenv("HLEDGER_JOURNAL", "")
+
+	tmpDir := t.TempDir()
+
+	mainPath := filepath.Join(tmpDir, "main.journal")
+	mainContent := `include accounts.journal`
+	err := os.WriteFile(mainPath, []byte(mainContent), 0644)
+	require.NoError(t, err)
+
+	accountsPath := filepath.Join(tmpDir, "accounts.journal")
+	accountsContent := `decimal-mark ,
+
+account expenses:food
+account assets:cash`
+	err = os.WriteFile(accountsPath, []byte(accountsContent), 0644)
+	require.NoError(t, err)
+
+	loader := include.NewLoader()
+	ws := NewWorkspace(tmpDir, loader)
+
+	err = ws.Initialize()
+	require.NoError(t, err)
+
+	formats := ws.GetCommodityFormats()
+
+	_, hasDefault := formats[""]
+	assert.False(t, hasDefault,
+		"decimal-mark from included file should not leak into workspace formats (scope: current file only)")
+}
+
+func TestWorkspace_GetCommodityFormats_DecimalMarkFromPrimaryFile(t *testing.T) {
+	t.Setenv("LEDGER_FILE", "")
+	t.Setenv("HLEDGER_JOURNAL", "")
+
+	tmpDir := t.TempDir()
+
+	mainPath := filepath.Join(tmpDir, "main.journal")
+	mainContent := `decimal-mark ,
+
+include transactions.journal`
+	err := os.WriteFile(mainPath, []byte(mainContent), 0644)
+	require.NoError(t, err)
+
+	txPath := filepath.Join(tmpDir, "transactions.journal")
+	err = os.WriteFile(txPath, []byte(""), 0644)
+	require.NoError(t, err)
+
+	loader := include.NewLoader()
+	ws := NewWorkspace(tmpDir, loader)
+
+	err = ws.Initialize()
+	require.NoError(t, err)
+
+	formats := ws.GetCommodityFormats()
+	require.NotNil(t, formats)
+
+	defaultFormat, ok := formats[""]
+	assert.True(t, ok,
+		"decimal-mark from primary file should be available in workspace formats")
+	assert.Equal(t, ',', defaultFormat.DecimalMark)
+	assert.Equal(t, ".", defaultFormat.ThousandsSep)
+	assert.True(t, defaultFormat.AutoPrecision)
+}

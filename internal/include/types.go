@@ -69,6 +69,24 @@ func (r *ResolvedJournal) AllDirectives() []ast.Directive {
 	return result
 }
 
+func (r *ResolvedJournal) FormatDirectives() []ast.Directive {
+	var result []ast.Directive
+	if r.Primary != nil {
+		result = append(result, r.Primary.Directives...)
+	}
+	for _, path := range r.FileOrder {
+		if j, ok := r.Files[path]; ok {
+			for _, d := range j.Directives {
+				if _, ok := d.(ast.DecimalMarkDirective); ok {
+					continue
+				}
+				result = append(result, d)
+			}
+		}
+	}
+	return result
+}
+
 func (r *ResolvedJournal) AllIncludes() []ast.Include {
 	var result []ast.Include
 	if r.Primary != nil {
