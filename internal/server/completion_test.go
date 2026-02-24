@@ -3846,3 +3846,136 @@ func TestCompletion_TagName_AfterComma_CalculateRange(t *testing.T) {
 	assert.Equal(t, uint32(36), r.Start.Character, "should start after ', '")
 	assert.Equal(t, uint32(39), r.End.Character, "should end at end of partial tag name")
 }
+
+func TestCompletion_TagName_CRLF(t *testing.T) {
+	srv := NewServer()
+	content := "2024-01-15 test  ; project:alpha, status:done\r\n    expenses:food  $50\r\n    assets:cash\r\n\r\n2024-01-16 another ; proj"
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 25},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "project", "CRLF: tag name fuzzy match should work")
+}
+
+func TestCompletion_TagValue_CRLF(t *testing.T) {
+	srv := NewServer()
+	content := "2024-01-15 test1  ; project:alpha\r\n    expenses:food  $50\r\n    assets:cash\r\n\r\n2024-01-16 test2  ; project:beta\r\n    expenses:rent  $1000\r\n    assets:bank\r\n\r\n2024-01-17 new ; project:"
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 8, Character: 25},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "alpha", "CRLF: tag value completion should work")
+}
+
+func TestCompletion_TagName_PostingComment(t *testing.T) {
+	srv := NewServer()
+	content := `2024-01-15 test  ; project:alpha
+    expenses:food  $50  ; category:groceries
+    assets:cash
+
+2024-01-16 another
+    expenses:rent  $1000  ; `
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 5, Character: 27},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "project", "posting comment: should suggest tag names")
+	assert.Contains(t, labels, "category", "posting comment: should suggest tag names")
+}
+
+func TestCompletion_TagValue_PostingComment(t *testing.T) {
+	srv := NewServer()
+	// line 5: "    expenses:rent  $1000  ; project:" (36 chars)
+	// ';' at 26, ':' at 35, cursor at 36 = end of line
+	content := `2024-01-15 test  ; project:alpha
+    expenses:food  $50  ; category:groceries
+    assets:cash
+
+2024-01-16 another
+    expenses:rent  $1000  ; project:`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 5, Character: 36},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "alpha", "posting comment: should suggest tag values")
+}
+
+func TestCompletion_TagName_Unicode_ExtractQuery(t *testing.T) {
+	// Verify extractQueryText handles Cyrillic in tag name context
+	// "2024-01-16 описание ; про" = 25 UTF-16 units (Cyrillic = 1 UTF-16 unit each)
+	content := "2024-01-16 описание ; про"
+	pos := protocol.Position{Line: 0, Character: 25}
+	query := extractQueryText(content, pos, ContextTagName)
+	assert.Equal(t, "про", query, "Unicode: Cyrillic query text should be extracted")
+}
+
+func TestCompletion_TagValue_Unicode_ExtractQuery(t *testing.T) {
+	// "2024-01-16 описание ; project:аль" = 33 UTF-16 units
+	content := "2024-01-16 описание ; project:аль"
+	pos := protocol.Position{Line: 0, Character: 33}
+	query := extractQueryText(content, pos, ContextTagValue)
+	assert.Equal(t, "аль", query, "Unicode: Cyrillic value query should be extracted")
+}
+
+func TestCompletion_TagName_Unicode_CalculateRange(t *testing.T) {
+	// "2024-01-16 описание ; про" — ';' at byte 22, ' ' at 23, 'п' starts at 24
+	// UTF-16: ';' at offset 17, ' ' at 18, 'п' at 19
+	content := "2024-01-16 описание ; про"
+	pos := protocol.Position{Line: 0, Character: 25}
+	r := calculateTextEditRange(content, pos, ContextTagName)
+	require.NotNil(t, r)
+	assert.Equal(t, uint32(22), r.Start.Character, "Unicode: start after '; '")
+	assert.Equal(t, uint32(25), r.End.Character, "Unicode: end at cursor")
+}

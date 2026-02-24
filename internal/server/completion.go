@@ -331,15 +331,17 @@ func isDigitOrSign(c byte) bool {
 	return (c >= '0' && c <= '9') || c == '-' || c == '+'
 }
 
-func determineTagContext(line string, pos protocol.Position) CompletionContextType {
-	semicolonIdx := strings.Index(line, ";")
-	if semicolonIdx == -1 {
-		return ContextUnknown
-	}
+type commentCursorInfo struct {
+	semicolonIdx    int
+	afterSemicolon  string
+	cursorInComment int
+	beforeCursor    string
+}
 
-	bytePos := lsputil.UTF16OffsetToByteOffset(line, int(pos.Character))
-	if bytePos <= semicolonIdx {
-		return ContextUnknown
+func parseCommentCursor(line string, bytePos int) (commentCursorInfo, bool) {
+	semicolonIdx := strings.Index(line, ";")
+	if semicolonIdx == -1 || bytePos <= semicolonIdx {
+		return commentCursorInfo{}, false
 	}
 
 	afterSemicolon := line[semicolonIdx+1:]
@@ -348,17 +350,30 @@ func determineTagContext(line string, pos protocol.Position) CompletionContextTy
 		cursorInComment = len(afterSemicolon)
 	}
 
-	beforeCursor := afterSemicolon[:cursorInComment]
+	return commentCursorInfo{
+		semicolonIdx:    semicolonIdx,
+		afterSemicolon:  afterSemicolon,
+		cursorInComment: cursorInComment,
+		beforeCursor:    afterSemicolon[:cursorInComment],
+	}, true
+}
 
-	lastColon := strings.LastIndex(beforeCursor, ":")
-	lastComma := strings.LastIndex(beforeCursor, ",")
+func determineTagContext(line string, pos protocol.Position) CompletionContextType {
+	bytePos := lsputil.UTF16OffsetToByteOffset(line, int(pos.Character))
+	info, ok := parseCommentCursor(line, bytePos)
+	if !ok {
+		return ContextUnknown
+	}
+
+	lastColon := strings.LastIndex(info.beforeCursor, ":")
+	lastComma := strings.LastIndex(info.beforeCursor, ",")
 
 	if lastColon == -1 {
 		return ContextTagName
 	}
 
 	if lastComma > lastColon {
-		afterComma := strings.TrimSpace(beforeCursor[lastComma+1:])
+		afterComma := strings.TrimSpace(info.beforeCursor[lastComma+1:])
 		if strings.Contains(afterComma, ":") {
 			return ContextTagValue
 		}
@@ -518,30 +533,19 @@ func getAccountsForPrefix(accounts *analyzer.AccountIndex, prefix string) []stri
 
 func extractCurrentTagName(line string, pos int) string {
 	bytePos := lsputil.UTF16OffsetToByteOffset(line, pos)
-
-	semicolonIdx := strings.Index(line, ";")
-	if semicolonIdx == -1 || bytePos <= semicolonIdx {
+	info, ok := parseCommentCursor(line, bytePos)
+	if !ok {
 		return ""
 	}
 
-	afterSemicolon := line[semicolonIdx+1:]
-	cursorInComment := bytePos - semicolonIdx - 1
-	if cursorInComment < 0 || cursorInComment > len(afterSemicolon) {
-		cursorInComment = len(afterSemicolon)
-	}
-
-	beforeCursor := afterSemicolon[:cursorInComment]
-
-	lastColon := strings.LastIndex(beforeCursor, ":")
+	lastColon := strings.LastIndex(info.beforeCursor, ":")
 	if lastColon == -1 {
 		return ""
 	}
 
-	lastComma := strings.LastIndex(beforeCursor[:lastColon], ",")
+	lastComma := strings.LastIndex(info.beforeCursor[:lastColon], ",")
 	start := lastComma + 1
-	tagName := strings.TrimSpace(beforeCursor[start:lastColon])
-
-	return tagName
+	return strings.TrimSpace(info.beforeCursor[start:lastColon])
 }
 
 // generateDateCompletionItems creates date suggestions with today/yesterday/tomorrow at top.
@@ -791,43 +795,31 @@ func calculateTextEditRange(content string, pos protocol.Position, ctxType Compl
 			}
 		}
 	case ContextTagName:
-		semicolonIdx := strings.Index(line, ";")
-		if semicolonIdx == -1 {
+		info, ok := parseCommentCursor(line, byteCol)
+		if !ok {
 			return nil
 		}
-		afterSemicolon := line[semicolonIdx+1:]
-		cursorInComment := byteCol - semicolonIdx - 1
-		if cursorInComment < 0 || cursorInComment > len(afterSemicolon) {
-			cursorInComment = len(afterSemicolon)
-		}
-		beforeCursorInComment := afterSemicolon[:cursorInComment]
-		lastComma := strings.LastIndex(beforeCursorInComment, ",")
+		lastComma := strings.LastIndex(info.beforeCursor, ",")
 		if lastComma != -1 {
-			seg := beforeCursorInComment[lastComma+1:]
+			seg := info.beforeCursor[lastComma+1:]
 			trimmed := strings.TrimLeft(seg, " ")
-			startByte = semicolonIdx + 1 + lastComma + 1 + (len(seg) - len(trimmed))
+			startByte = info.semicolonIdx + 1 + lastComma + 1 + (len(seg) - len(trimmed))
 		} else {
-			trimmed := strings.TrimLeft(afterSemicolon[:cursorInComment], " ")
-			startByte = semicolonIdx + 1 + (cursorInComment - len(trimmed))
+			trimmed := strings.TrimLeft(info.beforeCursor, " ")
+			startByte = info.semicolonIdx + 1 + (info.cursorInComment - len(trimmed))
 		}
 	case ContextTagValue:
-		semicolonIdx := strings.Index(line, ";")
-		if semicolonIdx == -1 {
+		info, ok := parseCommentCursor(line, byteCol)
+		if !ok {
 			return nil
 		}
-		afterSemicolon := line[semicolonIdx+1:]
-		cursorInComment := byteCol - semicolonIdx - 1
-		if cursorInComment < 0 || cursorInComment > len(afterSemicolon) {
-			cursorInComment = len(afterSemicolon)
-		}
-		beforeCursorInComment := afterSemicolon[:cursorInComment]
-		lastColon := strings.LastIndex(beforeCursorInComment, ":")
+		lastColon := strings.LastIndex(info.beforeCursor, ":")
 		if lastColon == -1 {
 			return nil
 		}
-		seg := beforeCursorInComment[lastColon+1:]
+		seg := info.beforeCursor[lastColon+1:]
 		trimmed := strings.TrimLeft(seg, " ")
-		startByte = semicolonIdx + 1 + lastColon + 1 + (len(seg) - len(trimmed))
+		startByte = info.semicolonIdx + 1 + lastColon + 1 + (len(seg) - len(trimmed))
 	case ContextDate:
 		if len(line) > 0 && line[0] >= '0' && line[0] <= '9' {
 			startByte = 0
@@ -990,28 +982,26 @@ func extractQueryText(content string, pos protocol.Position, ctxType CompletionC
 		return ""
 
 	case ContextTagName:
-		semicolonIdx := strings.Index(beforeCursor, ";")
-		if semicolonIdx == -1 {
+		info, ok := parseCommentCursor(line, byteCol)
+		if !ok {
 			return ""
 		}
-		afterSemicolon := beforeCursor[semicolonIdx+1:]
-		lastComma := strings.LastIndex(afterSemicolon, ",")
+		lastComma := strings.LastIndex(info.beforeCursor, ",")
 		if lastComma != -1 {
-			return strings.TrimSpace(afterSemicolon[lastComma+1:])
+			return strings.TrimSpace(info.beforeCursor[lastComma+1:])
 		}
-		return strings.TrimSpace(afterSemicolon)
+		return strings.TrimSpace(info.beforeCursor)
 
 	case ContextTagValue:
-		semicolonIdx := strings.Index(beforeCursor, ";")
-		if semicolonIdx == -1 {
+		info, ok := parseCommentCursor(line, byteCol)
+		if !ok {
 			return ""
 		}
-		afterSemicolon := beforeCursor[semicolonIdx+1:]
-		lastColon := strings.LastIndex(afterSemicolon, ":")
+		lastColon := strings.LastIndex(info.beforeCursor, ":")
 		if lastColon == -1 {
 			return ""
 		}
-		return strings.TrimSpace(afterSemicolon[lastColon+1:])
+		return strings.TrimSpace(info.beforeCursor[lastColon+1:])
 
 	case ContextDirective:
 		return beforeCursor
