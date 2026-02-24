@@ -3678,3 +3678,171 @@ func TestCompletion_Directive_FindTokenEndScansToEndOfLine(t *testing.T) {
 	assert.Equal(t, len("apply account"), end,
 		"ContextDirective findTokenEnd should scan to end of line, not stop at space")
 }
+
+func TestCompletion_TagName_TextEditRange(t *testing.T) {
+	srv := NewServer()
+	// line 4: "2024-01-16 another ; proj" (25 chars)
+	// ';' at 19, ' ' at 20, 'p' at 21
+	content := `2024-01-15 test  ; project:alpha, status:done
+    expenses:food  $50
+    assets:cash
+
+2024-01-16 another ; proj`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 25},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	for _, item := range result.Items {
+		if item.Label == "project" {
+			require.NotNil(t, item.TextEdit, "tag name completion should have TextEdit")
+			assert.Equal(t, uint32(4), item.TextEdit.Range.Start.Line)
+			assert.Equal(t, uint32(21), item.TextEdit.Range.Start.Character,
+				"TextEdit should start after '; '")
+			return
+		}
+	}
+	t.Fatal("project not found in tag name completion items")
+}
+
+func TestCompletion_TagValue_TextEditRange(t *testing.T) {
+	srv := NewServer()
+	// line 8: "2024-01-17 new ; project:al" (27 chars)
+	// ';' at 15, ':' at 24, 'a' at 25, 'l' at 26
+	content := `2024-01-15 test1  ; project:alpha
+    expenses:food  $50
+    assets:cash
+
+2024-01-16 test2  ; project:beta
+    expenses:rent  $1000
+    assets:bank
+
+2024-01-17 new ; project:al`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 8, Character: 27},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	for _, item := range result.Items {
+		if item.Label == "alpha" {
+			require.NotNil(t, item.TextEdit, "tag value completion should have TextEdit")
+			assert.Equal(t, uint32(8), item.TextEdit.Range.Start.Line)
+			assert.Equal(t, uint32(25), item.TextEdit.Range.Start.Character,
+				"TextEdit should start after 'project:'")
+			return
+		}
+	}
+	t.Fatal("alpha not found in tag value completion items")
+}
+
+func TestCompletion_TagName_FuzzyMatch(t *testing.T) {
+	srv := NewServer()
+	content := `2024-01-15 test  ; project:alpha, status:done
+    expenses:food  $50
+    assets:cash
+
+2024-01-16 another ; proj`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 25},
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "project", "fuzzy match should find 'project' from 'proj'")
+	assert.NotContains(t, labels, "status", "fuzzy match should filter out 'status'")
+}
+
+func TestCompletion_TagName_FindTokenEnd(t *testing.T) {
+	end := findTokenEnd("; project:alpha, status:done", 2, ContextTagName)
+	assert.Equal(t, 9, end, "ContextTagName findTokenEnd should stop at ':'")
+}
+
+func TestCompletion_TagValue_FindTokenEnd(t *testing.T) {
+	end := findTokenEnd("; project:alpha, status:done", 11, ContextTagValue)
+	assert.Equal(t, 15, end, "ContextTagValue findTokenEnd should stop at ','")
+}
+
+func TestCompletion_TagName_ExtractQuery(t *testing.T) {
+	content := "2024-01-16 another ; proj"
+	pos := protocol.Position{Line: 0, Character: 25}
+	query := extractQueryText(content, pos, ContextTagName)
+	assert.Equal(t, "proj", query)
+}
+
+func TestCompletion_TagValue_ExtractQuery(t *testing.T) {
+	// "2024-01-16 another ; project:bet" — len=32, ':' at 28, 'b' at 29
+	content := "2024-01-16 another ; project:bet"
+	pos := protocol.Position{Line: 0, Character: 32}
+	query := extractQueryText(content, pos, ContextTagValue)
+	assert.Equal(t, "bet", query)
+}
+
+func TestCompletion_TagName_AfterComma_ExtractQuery(t *testing.T) {
+	content := "2024-01-16 another ; project:alpha, sta"
+	pos := protocol.Position{Line: 0, Character: 39}
+	query := extractQueryText(content, pos, ContextTagName)
+	assert.Equal(t, "sta", query)
+}
+
+func TestCompletion_TagName_CalculateRange(t *testing.T) {
+	// "2024-01-16 another ; proj" — ';' at 19, ' ' at 20, 'p' at 21
+	content := "2024-01-16 another ; proj"
+	pos := protocol.Position{Line: 0, Character: 25}
+	r := calculateTextEditRange(content, pos, ContextTagName)
+	require.NotNil(t, r, "calculateTextEditRange should not return nil for ContextTagName")
+	assert.Equal(t, uint32(21), r.Start.Character, "should start after '; '")
+	assert.Equal(t, uint32(25), r.End.Character, "should end at end of partial tag name")
+}
+
+func TestCompletion_TagValue_CalculateRange(t *testing.T) {
+	// "2024-01-16 another ; project:bet" — ':' at 28, 'b' at 29, len=32
+	content := "2024-01-16 another ; project:bet"
+	pos := protocol.Position{Line: 0, Character: 32}
+	r := calculateTextEditRange(content, pos, ContextTagValue)
+	require.NotNil(t, r, "calculateTextEditRange should not return nil for ContextTagValue")
+	assert.Equal(t, uint32(29), r.Start.Character, "should start after 'project:'")
+	assert.Equal(t, uint32(32), r.End.Character, "should end at end of partial value")
+}
+
+func TestCompletion_TagName_AfterComma_CalculateRange(t *testing.T) {
+	// "2024-01-16 another ; project:alpha, sta" — ',' at 34, ' ' at 35, 's' at 36, len=39
+	content := "2024-01-16 another ; project:alpha, sta"
+	pos := protocol.Position{Line: 0, Character: 39}
+	r := calculateTextEditRange(content, pos, ContextTagName)
+	require.NotNil(t, r, "calculateTextEditRange should not return nil for ContextTagName after comma")
+	assert.Equal(t, uint32(36), r.Start.Character, "should start after ', '")
+	assert.Equal(t, uint32(39), r.End.Character, "should end at end of partial tag name")
+}

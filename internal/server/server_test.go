@@ -152,7 +152,7 @@ func TestServer_Initialize(t *testing.T) {
 	assert.True(t, caps.TextDocumentSync.(protocol.TextDocumentSyncOptions).OpenClose)
 	assert.Equal(t, protocol.TextDocumentSyncKindIncremental, caps.TextDocumentSync.(protocol.TextDocumentSyncOptions).Change)
 	assert.NotNil(t, caps.CompletionProvider)
-	assert.Equal(t, []string{":", "@", "=", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}, caps.CompletionProvider.TriggerCharacters)
+	assert.Equal(t, []string{":", "@", "=", ";", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}, caps.CompletionProvider.TriggerCharacters)
 	assert.True(t, caps.HoverProvider.(bool))
 	assert.True(t, caps.DocumentFormattingProvider.(bool))
 	assert.True(t, caps.DocumentRangeFormattingProvider.(bool))

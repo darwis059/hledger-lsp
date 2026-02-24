@@ -790,6 +790,44 @@ func calculateTextEditRange(content string, pos protocol.Position, ctxType Compl
 				startByte++
 			}
 		}
+	case ContextTagName:
+		semicolonIdx := strings.Index(line, ";")
+		if semicolonIdx == -1 {
+			return nil
+		}
+		afterSemicolon := line[semicolonIdx+1:]
+		cursorInComment := byteCol - semicolonIdx - 1
+		if cursorInComment < 0 || cursorInComment > len(afterSemicolon) {
+			cursorInComment = len(afterSemicolon)
+		}
+		beforeCursorInComment := afterSemicolon[:cursorInComment]
+		lastComma := strings.LastIndex(beforeCursorInComment, ",")
+		if lastComma != -1 {
+			seg := beforeCursorInComment[lastComma+1:]
+			trimmed := strings.TrimLeft(seg, " ")
+			startByte = semicolonIdx + 1 + lastComma + 1 + (len(seg) - len(trimmed))
+		} else {
+			trimmed := strings.TrimLeft(afterSemicolon[:cursorInComment], " ")
+			startByte = semicolonIdx + 1 + (cursorInComment - len(trimmed))
+		}
+	case ContextTagValue:
+		semicolonIdx := strings.Index(line, ";")
+		if semicolonIdx == -1 {
+			return nil
+		}
+		afterSemicolon := line[semicolonIdx+1:]
+		cursorInComment := byteCol - semicolonIdx - 1
+		if cursorInComment < 0 || cursorInComment > len(afterSemicolon) {
+			cursorInComment = len(afterSemicolon)
+		}
+		beforeCursorInComment := afterSemicolon[:cursorInComment]
+		lastColon := strings.LastIndex(beforeCursorInComment, ":")
+		if lastColon == -1 {
+			return nil
+		}
+		seg := beforeCursorInComment[lastColon+1:]
+		trimmed := strings.TrimLeft(seg, " ")
+		startByte = semicolonIdx + 1 + lastColon + 1 + (len(seg) - len(trimmed))
 	case ContextDate:
 		if len(line) > 0 && line[0] >= '0' && line[0] <= '9' {
 			startByte = 0
@@ -843,6 +881,21 @@ func findTokenEnd(line string, byteCol int, ctxType CompletionContextType) int {
 	case ContextCommodity, ContextDate:
 		for i := 0; i < len(rest); i++ {
 			if rest[i] == ' ' || rest[i] == '\t' {
+				return byteCol + i
+			}
+		}
+	case ContextTagName:
+		for i := 0; i < len(rest); i++ {
+			if rest[i] == ':' || rest[i] == ',' {
+				return byteCol + i
+			}
+		}
+	case ContextTagValue:
+		for i := 0; i < len(rest); i++ {
+			if rest[i] == ',' {
+				return byteCol + i
+			}
+			if i+1 < len(rest) && rest[i] == ' ' && rest[i+1] == ' ' {
 				return byteCol + i
 			}
 		}
@@ -935,6 +988,30 @@ func extractQueryText(content string, pos protocol.Position, ctxType CompletionC
 			return beforeCursor
 		}
 		return ""
+
+	case ContextTagName:
+		semicolonIdx := strings.Index(beforeCursor, ";")
+		if semicolonIdx == -1 {
+			return ""
+		}
+		afterSemicolon := beforeCursor[semicolonIdx+1:]
+		lastComma := strings.LastIndex(afterSemicolon, ",")
+		if lastComma != -1 {
+			return strings.TrimSpace(afterSemicolon[lastComma+1:])
+		}
+		return strings.TrimSpace(afterSemicolon)
+
+	case ContextTagValue:
+		semicolonIdx := strings.Index(beforeCursor, ";")
+		if semicolonIdx == -1 {
+			return ""
+		}
+		afterSemicolon := beforeCursor[semicolonIdx+1:]
+		lastColon := strings.LastIndex(afterSemicolon, ":")
+		if lastColon == -1 {
+			return ""
+		}
+		return strings.TrimSpace(afterSemicolon[lastColon+1:])
 
 	case ContextDirective:
 		return beforeCursor
