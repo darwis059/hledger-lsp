@@ -887,9 +887,6 @@ func findTokenEnd(line string, byteCol int, ctxType CompletionContextType) int {
 			if rest[i] == ',' {
 				return byteCol + i
 			}
-			if i+1 < len(rest) && rest[i] == ' ' && rest[i+1] == ' ' {
-				return byteCol + i
-			}
 		}
 	case ContextDirective:
 		return len(line)

@@ -3795,6 +3795,44 @@ func TestCompletion_TagValue_FindTokenEnd(t *testing.T) {
 	assert.Equal(t, 15, end, "ContextTagValue findTokenEnd should stop at ','")
 }
 
+func TestCompletion_TagValue_FindTokenEnd_DoubleSpace(t *testing.T) {
+	end := findTokenEnd("; project:some  value", 10, ContextTagValue)
+	assert.Equal(t, 21, end,
+		"ContextTagValue should NOT stop at double spaces (tag values can contain spaces)")
+}
+
+func TestCompletion_TriggerCharacter_Semicolon(t *testing.T) {
+	srv := NewServer()
+	content := `2024-01-15 test  ; project:alpha
+    expenses:food  $50
+    assets:cash
+
+2024-01-16 another ;`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 4, Character: 20},
+		},
+		Context: &protocol.CompletionContext{
+			TriggerKind:      protocol.CompletionTriggerKindTriggerCharacter,
+			TriggerCharacter: ";",
+		},
+	}
+
+	result, err := srv.Completion(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	labels := extractLabels(result.Items)
+	assert.Contains(t, labels, "project",
+		"semicolon trigger should produce tag name completions")
+}
+
 func TestCompletion_TagName_ExtractQuery(t *testing.T) {
 	content := "2024-01-16 another ; proj"
 	pos := protocol.Position{Line: 0, Character: 25}
