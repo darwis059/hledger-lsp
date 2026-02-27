@@ -24,7 +24,7 @@ const (
 	TokenTypeAmount         = 4  // number
 	TokenTypeTag            = 5  // decorator
 	TokenTypeDirective      = 6  // keyword (shared with rules keyword)
-	TokenTypeCode           = 7  // string (shared with tagValue, note)
+	TokenTypeCode           = 7  // string (shared with tagValue)
 	TokenTypeStatus         = 8  // operator (shared with standard operator)
 	TokenTypeComment        = 9  // comment
 	TokenTypeString         = 7  // string (same index as code)
@@ -59,7 +59,7 @@ func GetSemanticTokensLegend() protocol.SemanticTokensLegend {
 			protocol.SemanticTokenNamespace,          // 0: account, accountVirtual
 			protocol.SemanticTokenType,               // 1: commodity
 			protocol.SemanticTokenFunction,           // 2: payee
-			protocol.SemanticTokenNumber,             // 3: date
+			protocol.SemanticTokenNumber,             // 3: date (both date and amount use number superType)
 			protocol.SemanticTokenNumber,             // 4: amount
 			protocol.SemanticTokenTypes("decorator"), // 5: tag
 			protocol.SemanticTokenKeyword,            // 6: directive, rules keyword
