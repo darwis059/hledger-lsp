@@ -18,11 +18,11 @@ import (
 const (
 	// All indices match the legend order in GetSemanticTokensLegend.
 	TokenTypeAccount        = 0  // namespace
-	TokenTypeCommodity      = 1  // macro
+	TokenTypeCommodity      = 1  // type
 	TokenTypePayee          = 2  // function
-	TokenTypeDate           = 3  // enumMember
+	TokenTypeDate           = 3  // number
 	TokenTypeAmount         = 4  // number
-	TokenTypeTag            = 5  // property
+	TokenTypeTag            = 5  // decorator
 	TokenTypeDirective      = 6  // keyword (shared with rules keyword)
 	TokenTypeCode           = 7  // string (shared with tagValue, note)
 	TokenTypeStatus         = 8  // operator (shared with standard operator)
@@ -31,7 +31,7 @@ const (
 	TokenTypeOperator       = 8  // operator (same index as status)
 	TokenTypeTagValue       = 7  // string (same index as code)
 	TokenTypeAccountVirtual = 0  // namespace (same as account; distinguished by abstract modifier)
-	TokenTypeNote           = 7  // string (same index as code)
+	TokenTypeNote           = 9  // comment (same index as comment)
 	TokenTypeRulesKeyword   = 6  // keyword (same index as directive)
 	TokenTypeRulesRegexp    = 10 // regexp
 	TokenTypeRulesParameter = 11 // parameter
@@ -56,18 +56,18 @@ type SemanticTokensServerCapabilities struct {
 func GetSemanticTokensLegend() protocol.SemanticTokensLegend {
 	return protocol.SemanticTokensLegend{
 		TokenTypes: []protocol.SemanticTokenTypes{
-			protocol.SemanticTokenNamespace,  // 0: account, accountVirtual
-			protocol.SemanticTokenMacro,      // 1: commodity
-			protocol.SemanticTokenFunction,   // 2: payee
-			protocol.SemanticTokenEnumMember, // 3: date
-			protocol.SemanticTokenNumber,     // 4: amount
-			protocol.SemanticTokenProperty,   // 5: tag
-			protocol.SemanticTokenKeyword,    // 6: directive, rules keyword
-			protocol.SemanticTokenString,     // 7: code, tagValue, note, text
-			protocol.SemanticTokenOperator,   // 8: status, operator
-			protocol.SemanticTokenComment,    // 9: comment
-			protocol.SemanticTokenRegexp,     // 10: rules regexp
-			protocol.SemanticTokenParameter,  // 11: rules parameter
+			protocol.SemanticTokenNamespace,          // 0: account, accountVirtual
+			protocol.SemanticTokenType,               // 1: commodity
+			protocol.SemanticTokenFunction,           // 2: payee
+			protocol.SemanticTokenNumber,             // 3: date
+			protocol.SemanticTokenNumber,             // 4: amount
+			protocol.SemanticTokenTypes("decorator"), // 5: tag
+			protocol.SemanticTokenKeyword,            // 6: directive, rules keyword
+			protocol.SemanticTokenString,             // 7: code, tagValue, text
+			protocol.SemanticTokenOperator,           // 8: status, operator
+			protocol.SemanticTokenComment,            // 9: comment, note
+			protocol.SemanticTokenRegexp,             // 10: rules regexp
+			protocol.SemanticTokenParameter,          // 11: rules parameter
 		},
 		TokenModifiers: []protocol.SemanticTokenModifiers{
 			protocol.SemanticTokenModifierDeclaration, // 0

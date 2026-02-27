@@ -14,11 +14,10 @@ func TestSemanticTokens_Legend(t *testing.T) {
 
 	assert.NotEmpty(t, legend.TokenTypes)
 	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenNamespace)
-	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenMacro)
+	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenType)
 	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenFunction)
-	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenEnumMember)
 	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenNumber)
-	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenProperty)
+	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenTypes("decorator"))
 	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenKeyword)
 	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenString)
 	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenOperator)
@@ -647,6 +646,24 @@ func TestSemanticTokens_CompleteExample(t *testing.T) {
 	assert.True(t, foundNote, "expected note token")
 	assert.Equal(t, 2, foundVirtual, "expected 2 virtual account tokens")
 	assert.Equal(t, 2, foundRegularAccount, "expected 2 regular account tokens")
+}
+
+func TestSemanticTokens_NoteUsesCommentType(t *testing.T) {
+	content := "2024-01-15 Whole Foods | Groceries\n    expenses:food  $50\n    assets:cash"
+
+	tokens := tokenizeForSemantics(content)
+	require.NotEmpty(t, tokens)
+
+	var noteToken *semanticToken
+	for i, tok := range tokens {
+		if tok.tokenType == TokenTypeNote {
+			noteToken = &tokens[i]
+			break
+		}
+	}
+
+	require.NotNil(t, noteToken, "expected note token after pipe")
+	assert.Equal(t, uint32(TokenTypeComment), noteToken.tokenType, "note should use comment type (same index as comment)")
 }
 
 func TestSemanticTokens_CyrillicTagPositions(t *testing.T) {
