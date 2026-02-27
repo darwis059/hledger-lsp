@@ -105,7 +105,7 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 
 	if settings.Features.Completion {
 		caps.CompletionProvider = &protocol.CompletionOptions{
-			TriggerCharacters: []string{":", "@", "=", ";", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"},
+			TriggerCharacters: []string{":", "@", "=", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"},
 			ResolveProvider:   true,
 		}
 	}
