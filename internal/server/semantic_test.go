@@ -13,18 +13,20 @@ func TestSemanticTokens_Legend(t *testing.T) {
 	legend := GetSemanticTokensLegend()
 
 	assert.NotEmpty(t, legend.TokenTypes)
-	// Custom hledger types
-	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenTypes("account"))
-	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenTypes("commodity"))
-	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenTypes("payee"))
-	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenTypes("date"))
-	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenTypes("amount"))
-	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenTypes("tag"))
-	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenTypes("directive"))
-	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenTypes("code"))
-	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenTypes("status"))
-	// Standard LSP types
+	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenNamespace)
+	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenMacro)
+	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenFunction)
+	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenEnumMember)
+	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenNumber)
+	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenProperty)
+	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenKeyword)
+	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenString)
+	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenOperator)
 	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenComment)
+	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenRegexp)
+	assert.Contains(t, legend.TokenTypes, protocol.SemanticTokenParameter)
+
+	assert.Contains(t, legend.TokenModifiers, protocol.SemanticTokenModifierAbstract)
 }
 
 func TestSemanticTokens_Encode(t *testing.T) {
@@ -514,28 +516,24 @@ func TestSemanticTokens_TagNameAndValueSeparate(t *testing.T) {
 
 func TestSemanticTokens_VirtualAccounts(t *testing.T) {
 	tests := []struct {
-		name     string
-		content  string
-		wantType uint32
+		name    string
+		content string
 	}{
 		{
 			name: "balanced virtual account with parentheses",
 			content: `2024-01-15 test
     (tracking:virtual)  $100`,
-			wantType: TokenTypeAccountVirtual,
 		},
 		{
 			name: "unbalanced virtual account with brackets",
 			content: `2024-01-15 test
     [budget:food]  $-100`,
-			wantType: TokenTypeAccountVirtual,
 		},
 		{
 			name: "mixed regular and virtual accounts",
 			content: `2024-01-15 test
     expenses:food  $50
     (tracking:virtual)  $100`,
-			wantType: TokenTypeAccountVirtual,
 		},
 	}
 
@@ -546,12 +544,12 @@ func TestSemanticTokens_VirtualAccounts(t *testing.T) {
 
 			found := false
 			for _, tok := range tokens {
-				if tok.tokenType == tt.wantType {
+				if tok.tokenType == TokenTypeAccount && tok.modifiers&(1<<ModifierAbstract) != 0 {
 					found = true
 					break
 				}
 			}
-			assert.True(t, found, "expected virtual account token type %d not found", tt.wantType)
+			assert.True(t, found, "expected namespace token with abstract modifier not found")
 		})
 	}
 }
@@ -618,7 +616,6 @@ func TestSemanticTokens_CompleteExample(t *testing.T) {
 	tokens := tokenizeForSemantics(content)
 	require.NotEmpty(t, tokens)
 
-	// Count different token types
 	var (
 		foundDate           bool
 		foundPayee          bool
@@ -628,16 +625,19 @@ func TestSemanticTokens_CompleteExample(t *testing.T) {
 	)
 
 	for _, tok := range tokens {
-		switch tok.tokenType {
-		case TokenTypeDate:
+		if tok.tokenType == TokenTypeDate {
 			foundDate = true
-		case TokenTypePayee:
+		}
+		if tok.tokenType == TokenTypePayee {
 			foundPayee = true
-		case TokenTypeNote:
+		}
+		if tok.tokenType == TokenTypeNote {
 			foundNote = true
-		case TokenTypeAccountVirtual:
+		}
+		if tok.tokenType == TokenTypeAccount && tok.modifiers&(1<<ModifierAbstract) != 0 {
 			foundVirtual++
-		case TokenTypeAccount:
+		}
+		if tok.tokenType == TokenTypeAccount && tok.modifiers&(1<<ModifierAbstract) == 0 {
 			foundRegularAccount++
 		}
 	}
@@ -808,6 +808,135 @@ func TestSemanticTokens_TagValueDoubleSpaceTermination(t *testing.T) {
 	}
 }
 
+func TestSemanticTokens_AccountDirectiveArgType(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		wantType uint32
+	}{
+		{
+			name:     "account with colon uses namespace type",
+			content:  "account expenses:food",
+			wantType: TokenTypeAccount,
+		},
+		{
+			name:     "account without colon uses namespace type",
+			content:  "account Расходы",
+			wantType: TokenTypeAccount,
+		},
+		{
+			name:     "account with colon and cyrillic uses namespace type",
+			content:  "account Расходы:Транспорт",
+			wantType: TokenTypeAccount,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeForSemantics(tt.content)
+			require.NotEmpty(t, tokens)
+
+			// Skip the directive token, check the argument token
+			var argToken *semanticToken
+			for i := range tokens {
+				if tokens[i].tokenType != TokenTypeDirective {
+					argToken = &tokens[i]
+					break
+				}
+			}
+			require.NotNil(t, argToken, "argument token not found")
+			assert.Equal(t, tt.wantType, argToken.tokenType,
+				"expected token type %d (namespace), got %d", tt.wantType, argToken.tokenType)
+			assert.NotZero(t, argToken.modifiers&(1<<ModifierDeclaration),
+				"expected declaration modifier")
+		})
+	}
+}
+
+func TestSemanticTokens_CommodityDirectiveArgType(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		wantType uint32
+	}{
+		{
+			name:     "commodity directive arg uses commodity type",
+			content:  "commodity USD",
+			wantType: TokenTypeCommodity,
+		},
+		{
+			name:     "commodity directive with symbol uses commodity type",
+			content:  "commodity $",
+			wantType: TokenTypeCommodity,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeForSemantics(tt.content)
+			require.NotEmpty(t, tokens)
+
+			var argToken *semanticToken
+			for i := range tokens {
+				if tokens[i].tokenType != TokenTypeDirective {
+					argToken = &tokens[i]
+					break
+				}
+			}
+			require.NotNil(t, argToken, "argument token not found")
+			assert.Equal(t, tt.wantType, argToken.tokenType,
+				"expected commodity type, got %d", argToken.tokenType)
+			assert.NotZero(t, argToken.modifiers&(1<<ModifierDeclaration),
+				"expected declaration modifier")
+		})
+	}
+}
+
+func TestSemanticTokens_SubdirectiveKeyword(t *testing.T) {
+	tests := []struct {
+		name         string
+		content      string
+		wantKeywords []string
+		wantStrings  int
+	}{
+		{
+			name:         "commodity format subdirective",
+			content:      "commodity RUB\n    format 1.000,00 RUB",
+			wantKeywords: []string{"format"},
+			wantStrings:  1,
+		},
+		{
+			name:         "account subdirectives",
+			content:      "account expenses\n    alias exp\n    note Expenses\n    type X",
+			wantKeywords: []string{"alias", "note", "type"},
+			wantStrings:  3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := tokenizeForSemantics(tt.content)
+			require.NotEmpty(t, tokens)
+
+			var directiveTokens []semanticToken
+			var stringTokens []semanticToken
+			for _, tok := range tokens {
+				if tok.tokenType == TokenTypeDirective && tok.line > 0 {
+					directiveTokens = append(directiveTokens, tok)
+				}
+				if tok.tokenType == TokenTypeString && tok.line > 0 {
+					stringTokens = append(stringTokens, tok)
+				}
+			}
+
+			assert.Len(t, directiveTokens, len(tt.wantKeywords),
+				"subdirective keyword count mismatch")
+			assert.Len(t, stringTokens, tt.wantStrings,
+				"subdirective value count mismatch")
+		})
+	}
+}
+
 func TestSemanticTokens_RulesLegendMapping(t *testing.T) {
 	legend := GetSemanticTokensLegend()
 	tokenTypes := legend.TokenTypes
@@ -819,6 +948,7 @@ func TestSemanticTokens_RulesLegendMapping(t *testing.T) {
 	require.True(t, int(TokenTypeRulesParameter) < len(tokenTypes),
 		"TokenTypeRulesParameter index %d out of legend bounds (%d)", TokenTypeRulesParameter, len(tokenTypes))
 
+	assert.Equal(t, protocol.SemanticTokenKeyword, tokenTypes[TokenTypeDirective])
 	assert.Equal(t, protocol.SemanticTokenKeyword, tokenTypes[TokenTypeRulesKeyword])
 	assert.Equal(t, protocol.SemanticTokenRegexp, tokenTypes[TokenTypeRulesRegexp])
 	assert.Equal(t, protocol.SemanticTokenParameter, tokenTypes[TokenTypeRulesParameter])

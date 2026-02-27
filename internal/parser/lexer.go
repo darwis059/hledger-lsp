@@ -7,18 +7,20 @@ import (
 )
 
 type Lexer struct {
-	input         string
-	pos           int
-	line          int
-	column        int
-	atStart       bool
-	afterIndent   bool
-	inTransaction bool
-	inDirective   bool
-	onPostingLine bool
-	afterSign     bool
-	afterNumber   bool
-	virtualCloser rune
+	input          string
+	pos            int
+	line           int
+	column         int
+	atStart        bool
+	afterIndent    bool
+	inTransaction  bool
+	inDirective    bool
+	directiveName  string
+	inSubdirective bool
+	onPostingLine  bool
+	afterSign      bool
+	afterNumber    bool
+	virtualCloser  rune
 }
 
 func NewLexer(input string) *Lexer {
@@ -86,6 +88,11 @@ func (l *Lexer) scanInLine() Token {
 
 	if l.pos >= len(l.input) {
 		return l.makeToken(TokenEOF, "")
+	}
+
+	if l.inSubdirective {
+		l.inSubdirective = false
+		return l.scanSubdirectiveValue()
 	}
 
 	ch := l.peek()
@@ -178,10 +185,13 @@ func (l *Lexer) scanInLine() Token {
 		}
 		// In directive context → check if it's an account, otherwise single-word argument
 		if l.inDirective {
-			if l.looksLikeAccount() {
-				return l.scanAccount() // Account name in directive (e.g., "account expenses:food")
+			if l.directiveName == "account" || l.directiveName == "bucket" || l.directiveName == "A" {
+				return l.scanAccount()
 			}
-			return l.scanDirectiveArg() // Directive arguments (e.g., "EUR" in "P 2024-01-15 EUR $1.08")
+			if l.looksLikeAccount() {
+				return l.scanAccount()
+			}
+			return l.scanDirectiveArg()
 		}
 		// Not in transaction and not on posting line → could be account (directive line) or text
 		if !l.inTransaction {
@@ -288,7 +298,8 @@ func (l *Lexer) scanNewline() Token {
 	// Check if next line starts at column 1 (not indented) - this ends the transaction or directive
 	if l.pos < len(l.input) && !l.isWhitespace(l.peek()) {
 		l.inTransaction = false
-		l.inDirective = false // Reset if no indent follows
+		l.inDirective = false
+		l.directiveName = ""
 	}
 	return Token{Type: TokenNewline, Value: "\n", Pos: startPos, End: l.position()}
 }
@@ -462,7 +473,8 @@ func (l *Lexer) scanDirectiveOrAccount() Token {
 	// Check for single-letter directives first (Y, P, D)
 	if isDirective(word) {
 		l.afterIndent = false
-		l.inDirective = true // Set directive context
+		l.inDirective = true
+		l.directiveName = word
 		return Token{Type: TokenDirective, Value: word, Pos: startPos, End: l.position()}
 	}
 
@@ -481,6 +493,7 @@ func (l *Lexer) scanDirectiveOrAccount() Token {
 		if isDirective(potentialDirective) {
 			l.afterIndent = false
 			l.inDirective = true
+			l.directiveName = potentialDirective
 			return Token{Type: TokenDirective, Value: potentialDirective, Pos: startPos, End: l.position()}
 		}
 
@@ -606,7 +619,20 @@ func (l *Lexer) scanSubdirectiveContent() Token {
 	start := l.pos
 	startPos := l.position()
 
-	// Scan entire line as text (until newline or comment)
+	for l.pos < len(l.input) && l.isLetter(l.peek()) {
+		l.advance()
+	}
+	word := l.input[start:l.pos]
+
+	if isSubdirective(word) {
+		l.afterIndent = false
+		l.inSubdirective = true
+		return Token{Type: TokenDirective, Value: word, Pos: startPos, End: l.position()}
+	}
+
+	l.pos = start
+	l.column = startPos.Column
+
 	for l.pos < len(l.input) {
 		ch := l.peek()
 		if ch == '\n' || ch == ';' {
@@ -867,4 +893,29 @@ var directiveSet = map[string]struct{}{
 func isDirective(word string) bool {
 	_, ok := directiveSet[word]
 	return ok
+}
+
+var subdirectiveSet = map[string]struct{}{
+	"alias": {}, "note": {}, "type": {}, "format": {}, "default": {},
+}
+
+func isSubdirective(word string) bool {
+	_, ok := subdirectiveSet[word]
+	return ok
+}
+
+func (l *Lexer) scanSubdirectiveValue() Token {
+	start := l.pos
+	startPos := l.position()
+
+	for l.pos < len(l.input) {
+		ch := l.peek()
+		if ch == '\n' || ch == ';' {
+			break
+		}
+		l.advance()
+	}
+
+	value := strings.TrimSpace(l.input[start:l.pos])
+	return Token{Type: TokenText, Value: value, Pos: startPos, End: l.position()}
 }

@@ -1707,7 +1707,8 @@ func TestLexer_CommodityDirectiveWithSubdirective(t *testing.T) {
 				{Type: TokenText, Value: "RUB"},
 				{Type: TokenNewline},
 				{Type: TokenIndent},
-				{Type: TokenText, Value: "format 1.000,00 RUB"},
+				{Type: TokenDirective, Value: "format"},
+				{Type: TokenText, Value: "1.000,00 RUB"},
 				{Type: TokenEOF},
 			},
 		},
@@ -1719,10 +1720,12 @@ func TestLexer_CommodityDirectiveWithSubdirective(t *testing.T) {
 				{Type: TokenText, Value: "USD"},
 				{Type: TokenNewline},
 				{Type: TokenIndent},
-				{Type: TokenText, Value: "format $1,000.00"},
+				{Type: TokenDirective, Value: "format"},
+				{Type: TokenText, Value: "$1,000.00"},
 				{Type: TokenNewline},
 				{Type: TokenIndent},
-				{Type: TokenText, Value: "note US Dollar"},
+				{Type: TokenDirective, Value: "note"},
+				{Type: TokenText, Value: "US Dollar"},
 				{Type: TokenEOF},
 			},
 		},
@@ -1751,7 +1754,8 @@ func TestLexer_AccountDirectiveWithSubdirectives(t *testing.T) {
 				{Type: TokenAccount, Value: "expenses:food"},
 				{Type: TokenNewline},
 				{Type: TokenIndent},
-				{Type: TokenText, Value: "alias food"},
+				{Type: TokenDirective, Value: "alias"},
+				{Type: TokenText, Value: "food"},
 				{Type: TokenEOF},
 			},
 		},
@@ -1763,10 +1767,188 @@ func TestLexer_AccountDirectiveWithSubdirectives(t *testing.T) {
 				{Type: TokenAccount, Value: "expenses:food"},
 				{Type: TokenNewline},
 				{Type: TokenIndent},
-				{Type: TokenText, Value: "alias food"},
+				{Type: TokenDirective, Value: "alias"},
+				{Type: TokenText, Value: "food"},
 				{Type: TokenNewline},
 				{Type: TokenIndent},
-				{Type: TokenText, Value: "note Food expenses"},
+				{Type: TokenDirective, Value: "note"},
+				{Type: TokenText, Value: "Food expenses"},
+				{Type: TokenEOF},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			tokens := collectTokens(lexer)
+			assertTokenTypesAndValues(t, tt.want, tokens)
+		})
+	}
+}
+
+func TestLexer_SubdirectiveTokens(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []Token
+	}{
+		{
+			name:  "commodity format subdirective splits into keyword + value",
+			input: "commodity RUB\n  format 1.000,00 RUB",
+			want: []Token{
+				{Type: TokenDirective, Value: "commodity"},
+				{Type: TokenText, Value: "RUB"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenDirective, Value: "format"},
+				{Type: TokenText, Value: "1.000,00 RUB"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "account alias subdirective splits",
+			input: "account expenses:food\n  alias food",
+			want: []Token{
+				{Type: TokenDirective, Value: "account"},
+				{Type: TokenAccount, Value: "expenses:food"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenDirective, Value: "alias"},
+				{Type: TokenText, Value: "food"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "account note subdirective splits",
+			input: "account expenses:food\n  note Food expenses",
+			want: []Token{
+				{Type: TokenDirective, Value: "account"},
+				{Type: TokenAccount, Value: "expenses:food"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenDirective, Value: "note"},
+				{Type: TokenText, Value: "Food expenses"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "account type subdirective splits",
+			input: "account expenses\n  type X",
+			want: []Token{
+				{Type: TokenDirective, Value: "account"},
+				{Type: TokenAccount, Value: "expenses"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenDirective, Value: "type"},
+				{Type: TokenText, Value: "X"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "subdirective keyword without value",
+			input: "account expenses\n  note",
+			want: []Token{
+				{Type: TokenDirective, Value: "account"},
+				{Type: TokenAccount, Value: "expenses"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenDirective, Value: "note"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "multiple subdirectives",
+			input: "account expenses\n  alias exp\n  note Expenses\n  type X",
+			want: []Token{
+				{Type: TokenDirective, Value: "account"},
+				{Type: TokenAccount, Value: "expenses"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenDirective, Value: "alias"},
+				{Type: TokenText, Value: "exp"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenDirective, Value: "note"},
+				{Type: TokenText, Value: "Expenses"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenDirective, Value: "type"},
+				{Type: TokenText, Value: "X"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "unknown subdirective keyword stays as text",
+			input: "account expenses\n  unknown value",
+			want: []Token{
+				{Type: TokenDirective, Value: "account"},
+				{Type: TokenAccount, Value: "expenses"},
+				{Type: TokenNewline},
+				{Type: TokenIndent},
+				{Type: TokenText, Value: "unknown value"},
+				{Type: TokenEOF},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			tokens := collectTokens(lexer)
+			assertTokenTypesAndValues(t, tt.want, tokens)
+		})
+	}
+}
+
+func TestLexer_AccountDirectiveWithoutColon(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []Token
+	}{
+		{
+			name:  "account without colon (cyrillic)",
+			input: "account Расходы",
+			want: []Token{
+				{Type: TokenDirective, Value: "account"},
+				{Type: TokenAccount, Value: "Расходы"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "account without colon (ascii)",
+			input: "account Assets",
+			want: []Token{
+				{Type: TokenDirective, Value: "account"},
+				{Type: TokenAccount, Value: "Assets"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "account with space no colon",
+			input: "account My Account",
+			want: []Token{
+				{Type: TokenDirective, Value: "account"},
+				{Type: TokenAccount, Value: "My Account"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "bucket without colon",
+			input: "bucket Расходы",
+			want: []Token{
+				{Type: TokenDirective, Value: "bucket"},
+				{Type: TokenAccount, Value: "Расходы"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "account with colon still works",
+			input: "account expenses:food",
+			want: []Token{
+				{Type: TokenDirective, Value: "account"},
+				{Type: TokenAccount, Value: "expenses:food"},
 				{Type: TokenEOF},
 			},
 		},

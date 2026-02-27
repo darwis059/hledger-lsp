@@ -16,36 +16,31 @@ import (
 )
 
 const (
-	// Custom hledger-specific semantic token types
-	TokenTypeAccount   = 0
-	TokenTypeCommodity = 1
-	TokenTypePayee     = 2
-	TokenTypeDate      = 3
-	TokenTypeAmount    = 4
-	TokenTypeTag       = 5
-	TokenTypeDirective = 6
-	TokenTypeCode      = 7
-	TokenTypeStatus    = 8
-
-	// Standard LSP types (kept for compatibility)
-	TokenTypeComment  = 9
-	TokenTypeString   = 10
-	TokenTypeOperator = 11
-
-	// Additional custom types
-	TokenTypeTagValue       = 12
-	TokenTypeAccountVirtual = 13
-	TokenTypeNote           = 14
-
-	// Rules file token types (index 15+)
-	TokenTypeRulesKeyword   = 15
-	TokenTypeRulesRegexp    = 16
-	TokenTypeRulesParameter = 17
+	// All indices match the legend order in GetSemanticTokensLegend.
+	TokenTypeAccount        = 0  // namespace
+	TokenTypeCommodity      = 1  // macro
+	TokenTypePayee          = 2  // function
+	TokenTypeDate           = 3  // enumMember
+	TokenTypeAmount         = 4  // number
+	TokenTypeTag            = 5  // property
+	TokenTypeDirective      = 6  // keyword (shared with rules keyword)
+	TokenTypeCode           = 7  // string (shared with tagValue, note)
+	TokenTypeStatus         = 8  // operator (shared with standard operator)
+	TokenTypeComment        = 9  // comment
+	TokenTypeString         = 7  // string (same index as code)
+	TokenTypeOperator       = 8  // operator (same index as status)
+	TokenTypeTagValue       = 7  // string (same index as code)
+	TokenTypeAccountVirtual = 0  // namespace (same as account; distinguished by abstract modifier)
+	TokenTypeNote           = 7  // string (same index as code)
+	TokenTypeRulesKeyword   = 6  // keyword (same index as directive)
+	TokenTypeRulesRegexp    = 10 // regexp
+	TokenTypeRulesParameter = 11 // parameter
 )
 
 const (
 	ModifierDeclaration = 0
 	ModifierDefinition  = 1
+	ModifierAbstract    = 5
 )
 
 type SemanticTokensFullOptions struct {
@@ -61,32 +56,26 @@ type SemanticTokensServerCapabilities struct {
 func GetSemanticTokensLegend() protocol.SemanticTokensLegend {
 	return protocol.SemanticTokensLegend{
 		TokenTypes: []protocol.SemanticTokenTypes{
-			// Custom hledger-specific types (indices 0-8)
-			"account",
-			"commodity",
-			"payee",
-			"date",
-			"amount",
-			"tag",
-			"directive",
-			"code",
-			"status",
-			// Standard LSP types (indices 9-11)
-			protocol.SemanticTokenComment,
-			protocol.SemanticTokenString,
-			protocol.SemanticTokenOperator,
-			// Additional custom types (index 12+)
-			"tagValue",
-			"accountVirtual",
-			"note",
-			// Rules file types (index 15+)
-			protocol.SemanticTokenKeyword,
-			protocol.SemanticTokenRegexp,
-			protocol.SemanticTokenParameter,
+			protocol.SemanticTokenNamespace,  // 0: account, accountVirtual
+			protocol.SemanticTokenMacro,      // 1: commodity
+			protocol.SemanticTokenFunction,   // 2: payee
+			protocol.SemanticTokenEnumMember, // 3: date
+			protocol.SemanticTokenNumber,     // 4: amount
+			protocol.SemanticTokenProperty,   // 5: tag
+			protocol.SemanticTokenKeyword,    // 6: directive, rules keyword
+			protocol.SemanticTokenString,     // 7: code, tagValue, note, text
+			protocol.SemanticTokenOperator,   // 8: status, operator
+			protocol.SemanticTokenComment,    // 9: comment
+			protocol.SemanticTokenRegexp,     // 10: rules regexp
+			protocol.SemanticTokenParameter,  // 11: rules parameter
 		},
 		TokenModifiers: []protocol.SemanticTokenModifiers{
-			protocol.SemanticTokenModifierDeclaration,
-			protocol.SemanticTokenModifierDefinition,
+			protocol.SemanticTokenModifierDeclaration, // 0
+			protocol.SemanticTokenModifierDefinition,  // 1
+			protocol.SemanticTokenModifierReadonly,    // 2
+			protocol.SemanticTokenModifierStatic,      // 3
+			protocol.SemanticTokenModifierDeprecated,  // 4
+			protocol.SemanticTokenModifierAbstract,    // 5: virtual accounts
 		},
 	}
 }
@@ -328,6 +317,7 @@ func tokenizeForSemantics(content string) []semanticToken {
 
 	inDirective := false
 	directiveType := ""
+	inSubdirective := false
 	isPayee := false
 	currentLine := -1
 	inVirtualContext := false
@@ -345,6 +335,7 @@ func tokenizeForSemantics(content string) []semanticToken {
 			inVirtualContext = false
 			seenPipe = false
 			isTransactionHeader = false
+			inSubdirective = false
 			if tok.Type == parser.TokenDirective {
 				inDirective = true
 				directiveType = tok.Value
@@ -357,6 +348,10 @@ func tokenizeForSemantics(content string) []semanticToken {
 				inDirective = false
 				directiveType = ""
 			}
+		}
+
+		if tok.Type == parser.TokenDirective && inDirective && tok.Value != directiveType {
+			inSubdirective = true
 		}
 
 		// Track virtual account context
@@ -379,15 +374,23 @@ func tokenizeForSemantics(content string) []semanticToken {
 		}
 
 		modifiers := uint32(0)
-		if inDirective && (directiveType == "account" || directiveType == "commodity") {
+		if inDirective && !inSubdirective && (directiveType == "account" || directiveType == "commodity") {
 			if tok.Type == parser.TokenAccount || tok.Type == parser.TokenCommodity || tok.Type == parser.TokenQuotedCommodity || tok.Type == parser.TokenText {
 				modifiers = 1 << ModifierDeclaration
+			}
+			if tok.Type == parser.TokenText {
+				switch directiveType {
+				case "account":
+					semType = TokenTypeAccount
+				case "commodity":
+					semType = TokenTypeCommodity
+				}
 			}
 		}
 
 		// Handle virtual accounts
 		if tok.Type == parser.TokenAccount && inVirtualContext {
-			semType = TokenTypeAccountVirtual
+			modifiers |= 1 << ModifierAbstract
 		}
 
 		// Handle transaction header: payee and note
