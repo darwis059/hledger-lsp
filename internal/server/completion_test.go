@@ -2,9 +2,11 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -2340,11 +2342,14 @@ func TestCompletion_PartialDateOverridesFileFormat(t *testing.T) {
 
 func TestCompletion_ShortDateKeepsShortFormat(t *testing.T) {
 	srv := NewServer()
-	content := `01-05 transaction 1
+	now := time.Now()
+	prefix := fmt.Sprintf("%02d-", now.Month())
+	histDate := fmt.Sprintf("%02d-05 transaction 1", now.Month())
+	content := histDate + `
     expenses:food  $20
     assets:cash
 
-02-`
+` + prefix
 
 	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
 
@@ -2353,7 +2358,7 @@ func TestCompletion_ShortDateKeepsShortFormat(t *testing.T) {
 			TextDocument: protocol.TextDocumentIdentifier{
 				URI: "file:///test.journal",
 			},
-			Position: protocol.Position{Line: 4, Character: 3},
+			Position: protocol.Position{Line: 4, Character: uint32(len(prefix))},
 		},
 	}
 
@@ -2365,7 +2370,7 @@ func TestCompletion_ShortDateKeepsShortFormat(t *testing.T) {
 	for _, item := range result.Items {
 		if item.Detail == "today" || item.Detail == "yesterday" || item.Detail == "tomorrow" {
 			assert.Regexp(t, `^\d{2}-\d{2}$`, item.Label,
-				"when user types '02-' and file uses MM-DD, dates should stay MM-DD; got %s", item.Label)
+				"when user types '%s' and file uses MM-DD, dates should stay MM-DD; got %s", prefix, item.Label)
 		}
 	}
 }
