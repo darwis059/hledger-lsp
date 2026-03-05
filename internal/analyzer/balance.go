@@ -6,7 +6,7 @@ import (
 	"github.com/juev/hledger-lsp/internal/ast"
 )
 
-func CheckBalance(tx *ast.Transaction) *BalanceResult {
+func CheckBalance(tx *ast.Transaction, userTolerance decimal.Decimal) *BalanceResult {
 	result := NewBalanceResult()
 
 	realPostings := filterRealPostings(tx.Postings)
@@ -30,6 +30,9 @@ func CheckBalance(tx *ast.Transaction) *BalanceResult {
 
 	for commodity, sum := range balances {
 		tolerance := toleranceForPrecision(precisions[commodity])
+		if userTolerance.IsPositive() && userTolerance.GreaterThan(tolerance) {
+			tolerance = userTolerance
+		}
 		if sum.Abs().GreaterThanOrEqual(tolerance) {
 			result.Balanced = false
 			result.Differences[commodity] = sum.Abs()

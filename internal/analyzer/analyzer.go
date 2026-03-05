@@ -4,11 +4,15 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/juev/hledger-lsp/internal/ast"
 	"github.com/juev/hledger-lsp/internal/include"
 )
 
-type Analyzer struct{}
+type Analyzer struct {
+	BalanceTolerance decimal.Decimal
+}
 
 func New() *Analyzer {
 	return &Analyzer{}
@@ -54,7 +58,7 @@ func (a *Analyzer) analyzeInternal(journal *ast.Journal, external ExternalDeclar
 
 	for i := range journal.Transactions {
 		tx := &journal.Transactions[i]
-		balanceResult := CheckBalance(tx)
+		balanceResult := CheckBalance(tx, a.BalanceTolerance)
 
 		if !balanceResult.Balanced {
 			diag := a.createBalanceDiagnostic(tx, balanceResult)
@@ -123,7 +127,7 @@ func (a *Analyzer) AnalyzeResolved(resolved *include.ResolvedJournal) *AnalysisR
 
 	for i := range resolved.Primary.Transactions {
 		tx := &resolved.Primary.Transactions[i]
-		balanceResult := CheckBalance(tx)
+		balanceResult := CheckBalance(tx, a.BalanceTolerance)
 
 		if !balanceResult.Balanced {
 			diag := a.createBalanceDiagnostic(tx, balanceResult)

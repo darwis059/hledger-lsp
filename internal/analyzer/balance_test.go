@@ -19,7 +19,7 @@ func TestCheckBalance_SimpleBalanced(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced)
 	assert.Empty(t, result.Differences)
@@ -34,7 +34,7 @@ func TestCheckBalance_InferredAmount(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced)
 	assert.Equal(t, 1, result.InferredIdx)
@@ -49,7 +49,7 @@ func TestCheckBalance_Unbalanced(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.False(t, result.Balanced)
 	assert.Equal(t, decimal.NewFromInt(10), result.Differences["$"])
@@ -66,7 +66,7 @@ func TestCheckBalance_MultiCommodity(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced)
 }
@@ -82,7 +82,7 @@ func TestCheckBalance_MultiCommodity_Unbalanced(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.False(t, result.Balanced)
 	assert.Equal(t, decimal.NewFromInt(10), result.Differences["EUR"])
@@ -97,7 +97,7 @@ func TestCheckBalance_MultipleInferred_Error(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.False(t, result.Balanced)
 }
@@ -111,7 +111,7 @@ func TestCheckBalance_WithCost_UnitPrice(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced)
 }
@@ -125,7 +125,7 @@ func TestCheckBalance_WithCost_TotalPrice(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced)
 }
@@ -143,7 +143,7 @@ func TestCheckBalance_ZeroAmount(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced)
 }
@@ -157,7 +157,7 @@ func TestCheckBalance_NegativeAmounts(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced)
 }
@@ -205,7 +205,7 @@ func TestCheckBalance_TableDriven(t *testing.T) {
 			require.Empty(t, errs)
 			require.Len(t, journal.Transactions, 1)
 
-			result := CheckBalance(&journal.Transactions[0])
+			result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 			assert.Equal(t, tt.balanced, result.Balanced)
 		})
@@ -222,7 +222,7 @@ func TestCheckBalance_MultiCurrencyInferred(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced, "multi-currency transaction with single inferred posting should be balanced")
 	assert.Equal(t, 2, result.InferredIdx)
@@ -238,7 +238,7 @@ func TestCheckBalance_MultiCurrencyWithBalanceAssertion(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced, "multi-currency with balance assertions should be balanced")
 }
@@ -254,7 +254,7 @@ func TestCheckBalance_MultiCurrencyExplicitlyBalanced(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced, "explicitly balanced multi-currency should be balanced")
 }
@@ -270,7 +270,7 @@ func TestCheckBalance_BalanceAssertionOnly_NotCountedAsInferred(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced, "balance-assertion-only postings should not count as inferred")
 }
@@ -286,7 +286,7 @@ func TestCheckBalance_AllBalanceAssertionOnly_Balanced(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced, "all balance-assertion-only postings contribute zero, explicit amounts should balance")
 }
@@ -301,7 +301,7 @@ func TestCheckBalance_BalanceAssertionPlusTwoInferred_MultipleInferred(t *testin
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.False(t, result.Balanced, "two truly inferred postings should still be MULTIPLE_INFERRED even with balance assertion posting")
 }
@@ -316,7 +316,7 @@ func TestCheckBalance_ExplicitAmountPlusBalanceAssertionPlusOneInferred(t *testi
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced, "explicit amount + balance-assertion-only + 1 inferred should be balanced")
 }
@@ -330,7 +330,7 @@ func TestCheckBalance_QuotedCommodityWithTotalCostAndBalanceAssertion(t *testing
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced, "stock sale with total cost and balance assertion should be balanced")
 }
@@ -392,7 +392,7 @@ func TestCheckBalance_CostRounding_WithinTolerance(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced, "cost rounding 0.001 within tolerance 0.005")
 }
@@ -408,7 +408,7 @@ func TestCheckBalance_CostRounding_ExceedsTolerance(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.False(t, result.Balanced, "cost rounding 0.011 exceeds tolerance 0.005")
 }
@@ -427,7 +427,7 @@ func TestCheckBalance_CostPrecisionExcluded(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced, "cost amount precision (4) must NOT tighten tolerance; "+
 		"posting precision 0 → tolerance 0.5, imbalance 0.003 within tolerance")
@@ -445,7 +445,7 @@ func TestCheckBalance_HigherPostingPrecision_TighterTolerance(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced, "precision 3 tolerance 0.0005; |0.0001| within tolerance")
 }
@@ -462,7 +462,7 @@ func TestCheckBalance_HigherPostingPrecision_ExceedsTighterTolerance(t *testing.
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.False(t, result.Balanced, "precision 3 tolerance 0.0005; |0.001| exceeds tolerance")
 }
@@ -480,9 +480,46 @@ func TestCheckBalance_MultiCommodity_DifferentTolerances(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.True(t, result.Balanced, "each commodity uses its own precision for tolerance")
+}
+
+func TestCheckBalance_UserToleranceOverridesPrecision(t *testing.T) {
+	// 3.00 * 0.335 = 1.005 EUR; balance = 1.005 - 1.00 = 0.00543 (simulated)
+	// Precision 2 → precisionTolerance = 0.005; 0.00543 > 0.005 → unbalanced with default
+	// userTolerance = 0.01; 0.00543 < 0.01 → balanced with user tolerance
+	input := `2024-01-15 exchange
+    assets:foreign  3.00 USD @ 0.33510 EUR
+    assets:eur  -1.00 EUR`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	resultDefault := CheckBalance(&journal.Transactions[0], decimal.Zero)
+	assert.False(t, resultDefault.Balanced, "should be unbalanced with default tolerance")
+
+	userTol, _ := decimal.NewFromString("0.01")
+	resultUser := CheckBalance(&journal.Transactions[0], userTol)
+	assert.True(t, resultUser.Balanced, "should be balanced with user tolerance 0.01")
+}
+
+func TestCheckBalance_PrecisionToleranceWinsWhenHigher(t *testing.T) {
+	// Precision 0 → precisionTolerance = 0.5
+	// userTolerance = 0.001 → max(0.5, 0.001) = 0.5
+	// Imbalance 0.003 < 0.5 → balanced (precision tolerance wins)
+	input := `2024-01-15 exchange
+    assets:foreign  5 USD @ 0.2006 EUR
+    assets:eur  -1 EUR`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	userTol, _ := decimal.NewFromString("0.001")
+	result := CheckBalance(&journal.Transactions[0], userTol)
+	assert.True(t, result.Balanced, "precision tolerance 0.5 should win over user 0.001")
 }
 
 func TestCheckBalance_MultiCommodity_OneExceedsTolerance(t *testing.T) {
@@ -498,7 +535,7 @@ func TestCheckBalance_MultiCommodity_OneExceedsTolerance(t *testing.T) {
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
-	result := CheckBalance(&journal.Transactions[0])
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
 
 	assert.False(t, result.Balanced, "CHF exceeds tolerance even though EUR is within")
 	assert.Contains(t, result.Differences, "CHF")

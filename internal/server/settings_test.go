@@ -380,6 +380,68 @@ func TestServer_SetSettings_ClearsAlignmentCacheOnFormattingChange(t *testing.T)
 	}
 }
 
+func TestParseSettingsFromRaw_Diagnostics_BalanceTolerance(t *testing.T) {
+	base := defaultServerSettings()
+
+	raw := map[string]interface{}{
+		"diagnostics": map[string]interface{}{
+			"balanceTolerance": 0.01,
+		},
+	}
+
+	result := parseSettingsFromRaw(base, raw)
+
+	if result.Diagnostics.BalanceTolerance != 0.01 {
+		t.Errorf("Diagnostics.BalanceTolerance = %v, want 0.01", result.Diagnostics.BalanceTolerance)
+	}
+}
+
+func TestParseSettingsFromRaw_Diagnostics_BalanceTolerance_FlatKey(t *testing.T) {
+	base := defaultServerSettings()
+
+	raw := map[string]interface{}{
+		"diagnostics.balanceTolerance": 0.005,
+	}
+
+	result := parseSettingsFromRaw(base, raw)
+
+	if result.Diagnostics.BalanceTolerance != 0.005 {
+		t.Errorf("Diagnostics.BalanceTolerance = %v, want 0.005", result.Diagnostics.BalanceTolerance)
+	}
+}
+
+func TestDefaultServerSettings_BalanceToleranceZero(t *testing.T) {
+	s := defaultServerSettings()
+
+	if s.Diagnostics.BalanceTolerance != 0 {
+		t.Errorf("Diagnostics.BalanceTolerance = %v, want 0", s.Diagnostics.BalanceTolerance)
+	}
+}
+
+func TestToFloat64(t *testing.T) {
+	tests := []struct {
+		input interface{}
+		want  float64
+		ok    bool
+	}{
+		{float64(0.01), 0.01, true},
+		{float32(0.5), 0.5, true},
+		{int(1), 1.0, true},
+		{int64(2), 2.0, true},
+		{"0.01", 0.01, true},
+		{"abc", 0, false},
+		{nil, 0, false},
+		{true, 0, false},
+	}
+
+	for _, tt := range tests {
+		got, ok := toFloat64(tt.input)
+		if ok != tt.ok || (ok && got != tt.want) {
+			t.Errorf("toFloat64(%v) = (%v, %v), want (%v, %v)", tt.input, got, ok, tt.want, tt.ok)
+		}
+	}
+}
+
 func TestServer_SetSettings_KeepsAlignmentCacheWhenFormattingUnchanged(t *testing.T) {
 	srv := NewServer()
 	uri := "file:///test.journal"

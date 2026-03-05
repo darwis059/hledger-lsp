@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/shopspring/decimal"
 	"go.lsp.dev/protocol"
 
 	"github.com/juev/hledger-lsp/internal/analyzer"
@@ -32,7 +33,7 @@ func (s *Server) CodeLens(_ context.Context, params *protocol.CodeLensParams) ([
 
 	for i := range journal.Transactions {
 		tx := &journal.Transactions[i]
-		result := analyzer.CheckBalance(tx)
+		result := analyzer.CheckBalance(tx, decimal.NewFromFloat(settings.Diagnostics.BalanceTolerance))
 
 		title := buildCodeLensTitle(result, len(tx.Postings))
 		lenses = append(lenses, protocol.CodeLens{

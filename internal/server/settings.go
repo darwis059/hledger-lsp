@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"go.lsp.dev/protocol"
 
 	"github.com/juev/hledger-lsp/internal/include"
@@ -36,6 +37,7 @@ type diagnosticsSettings struct {
 	UndeclaredAccounts     bool
 	UndeclaredCommodities  bool
 	UnbalancedTransactions bool
+	BalanceTolerance       float64
 }
 
 type formattingSettings struct {
@@ -133,6 +135,9 @@ func (s *Server) setSettings(settings serverSettings) {
 	}
 	if oldSettings.CLI.Path != settings.CLI.Path || oldSettings.CLI.Timeout != settings.CLI.Timeout {
 		s.reinitCLI(settings.CLI)
+	}
+	if s.analyzer != nil && oldSettings.Diagnostics.BalanceTolerance != settings.Diagnostics.BalanceTolerance {
+		s.analyzer.BalanceTolerance = decimal.NewFromFloat(settings.Diagnostics.BalanceTolerance)
 	}
 	if oldSettings.Formatting.IndentSize != settings.Formatting.IndentSize ||
 		oldSettings.Formatting.MinAlignmentColumn != settings.Formatting.MinAlignmentColumn {
@@ -290,6 +295,9 @@ func applySettingsMap(settings serverSettings, raw map[string]interface{}) serve
 		if value, ok := toBool(diagnosticsRaw["unbalancedTransactions"]); ok {
 			settings.Diagnostics.UnbalancedTransactions = value
 		}
+		if value, ok := toFloat64(diagnosticsRaw["balanceTolerance"]); ok {
+			settings.Diagnostics.BalanceTolerance = value
+		}
 	}
 	if value, ok := toBool(raw["diagnostics.undeclaredAccounts"]); ok {
 		settings.Diagnostics.UndeclaredAccounts = value
@@ -299,6 +307,9 @@ func applySettingsMap(settings serverSettings, raw map[string]interface{}) serve
 	}
 	if value, ok := toBool(raw["diagnostics.unbalancedTransactions"]); ok {
 		settings.Diagnostics.UnbalancedTransactions = value
+	}
+	if value, ok := toFloat64(raw["diagnostics.balanceTolerance"]); ok {
+		settings.Diagnostics.BalanceTolerance = value
 	}
 
 	// Formatting
@@ -442,6 +453,30 @@ func toBool(value interface{}) (bool, bool) {
 		}
 	}
 	return false, false
+}
+
+func toFloat64(value interface{}) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case string:
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return 0, false
+		}
+		parsed, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return 0, false
+		}
+		return parsed, true
+	}
+	return 0, false
 }
 
 func toString(value interface{}) (string, bool) {

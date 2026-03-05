@@ -1266,6 +1266,75 @@ func TestServer_DiagnosticsSettings(t *testing.T) {
 	})
 }
 
+func TestServer_BalanceTolerance(t *testing.T) {
+	t.Run("imbalance within user tolerance is not reported", func(t *testing.T) {
+		client := &mockClient{}
+		srv := NewServer()
+		srv.SetClient(client)
+
+		settings := srv.getSettings()
+		settings.Diagnostics.BalanceTolerance = 0.01
+		srv.setSettings(settings)
+
+		// 3.00 * 0.33510 = 1.0053; balance = 1.0053 - 1.00 = 0.0053
+		// Precision-based tolerance: 0.005 → 0.0053 > 0.005 → would be unbalanced
+		// User tolerance: 0.01 → 0.0053 < 0.01 → balanced
+		content := `2024-01-15 exchange
+    assets:foreign  3.00 USD @ 0.33510 EUR
+    assets:eur  -1.00 EUR
+`
+		uri := protocol.DocumentURI("file:///test.journal")
+		err := srv.DidOpen(context.Background(), &protocol.DidOpenTextDocumentParams{
+			TextDocument: protocol.TextDocumentItem{URI: uri, Text: content},
+		})
+		require.NoError(t, err)
+		time.Sleep(100 * time.Millisecond)
+
+		diagnostics := client.getDiagnostics()
+		for _, pub := range diagnostics {
+			for _, d := range pub.Diagnostics {
+				assert.NotEqual(t, "UNBALANCED", d.Code,
+					"imbalance 0.0053 should be within user tolerance 0.01")
+			}
+		}
+	})
+
+	t.Run("imbalance exceeding user tolerance is reported", func(t *testing.T) {
+		client := &mockClient{}
+		srv := NewServer()
+		srv.SetClient(client)
+
+		settings := srv.getSettings()
+		settings.Diagnostics.BalanceTolerance = 0.001
+		srv.setSettings(settings)
+
+		// 3.00 * 0.337 = 1.011; balance = 1.011 - 1.00 = 0.011
+		// Precision-based: 0.005, user: 0.001 → max = 0.005
+		// 0.011 > 0.005 → unbalanced
+		content := `2024-01-15 exchange
+    assets:foreign  3.00 USD @ 0.337 EUR
+    assets:eur  -1.00 EUR
+`
+		uri := protocol.DocumentURI("file:///test.journal")
+		err := srv.DidOpen(context.Background(), &protocol.DidOpenTextDocumentParams{
+			TextDocument: protocol.TextDocumentItem{URI: uri, Text: content},
+		})
+		require.NoError(t, err)
+		time.Sleep(100 * time.Millisecond)
+
+		diagnostics := client.getDiagnostics()
+		hasUnbalanced := false
+		for _, pub := range diagnostics {
+			for _, d := range pub.Diagnostics {
+				if d.Code == "UNBALANCED" {
+					hasUnbalanced = true
+				}
+			}
+		}
+		assert.True(t, hasUnbalanced, "imbalance 0.011 should exceed effective tolerance 0.005")
+	})
+}
+
 func TestNormalizeLineEndings(t *testing.T) {
 	tests := []struct {
 		name     string
