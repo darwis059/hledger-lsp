@@ -2450,3 +2450,33 @@ func TestLexer_LotPrice(t *testing.T) {
 		})
 	}
 }
+
+func TestLexer_UnbalancedBraceResetOnNewline(t *testing.T) {
+	input := "    assets:stocks  10 AAPL {\n    expenses:food  10,000 USD"
+	lexer := NewLexer(input)
+	tokens := collectTokens(lexer)
+
+	var found bool
+	for _, tok := range tokens {
+		if tok.Type == TokenNumber && tok.Value == "10,000" {
+			found = true
+		}
+	}
+	assert.True(t, found,
+		"unbalanced { must not cause comma on next line to be treated as separator")
+}
+
+func TestLexer_StrayRBraceNoNegativeState(t *testing.T) {
+	input := "    assets:stocks  10 AAPL }\n    expenses:food  10,000 USD"
+	lexer := NewLexer(input)
+	tokens := collectTokens(lexer)
+
+	var found bool
+	for _, tok := range tokens {
+		if tok.Type == TokenNumber && tok.Value == "10,000" {
+			found = true
+		}
+	}
+	assert.True(t, found,
+		"stray } must not cause comma to be treated as separator on next line")
+}

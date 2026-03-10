@@ -303,6 +303,7 @@ func (l *Lexer) scanNewline() Token {
 	l.afterNumber = false
 	l.afterSign = false
 	l.virtualCloser = 0
+	l.insideBraces = 0
 	// Check if next line starts at column 1 (not indented) - this ends the transaction or directive
 	if l.pos < len(l.input) && !l.isWhitespace(l.peek()) {
 		l.inTransaction = false
@@ -463,11 +464,15 @@ func (l *Lexer) scanRBrace() Token {
 
 	if l.pos < len(l.input) && l.peek() == '}' {
 		l.advance()
-		l.insideBraces--
+		if l.insideBraces > 0 {
+			l.insideBraces--
+		}
 		return Token{Type: TokenDoubleRBrace, Value: "}}", Pos: startPos, End: l.position()}
 	}
 
-	l.insideBraces--
+	if l.insideBraces > 0 {
+		l.insideBraces--
+	}
 	return Token{Type: TokenRBrace, Value: "}", Pos: startPos, End: l.position()}
 }
 

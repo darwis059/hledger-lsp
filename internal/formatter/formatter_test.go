@@ -1887,6 +1887,60 @@ func TestFormatDocument_MixedQuotedAndUnquotedAlignment(t *testing.T) {
 		"mixed quoted/unquoted alignment must be idempotent")
 }
 
+func TestFormatDocument_LotPriceBalanceAssertionAlignment(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {$150} = 10 AAPL
+    assets:cash  -$1500 = -$1500`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	lines := strings.Split(result, "\n")
+	require.True(t, len(lines) >= 3)
+
+	eqCol1 := strings.Index(lines[1], "= ")
+	eqCol2 := strings.Index(lines[2], "= ")
+	require.NotEqual(t, -1, eqCol1, "posting 1 must have balance assertion")
+	require.NotEqual(t, -1, eqCol2, "posting 2 must have balance assertion")
+	assert.Equal(t, eqCol1, eqCol2, "balance assertions must align at same column")
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+	assert.Equal(t, result, result2, "lot price BA alignment must be idempotent")
+}
+
+func TestFormatDocument_TotalLotPriceBalanceAssertionAlignment(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {{$1500}} = 10 AAPL
+    assets:cash  -$1500 = -$1500`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	lines := strings.Split(result, "\n")
+	require.True(t, len(lines) >= 3)
+
+	eqCol1 := strings.Index(lines[1], "= ")
+	eqCol2 := strings.Index(lines[2], "= ")
+	require.NotEqual(t, -1, eqCol1, "posting 1 must have balance assertion")
+	require.NotEqual(t, -1, eqCol2, "posting 2 must have balance assertion")
+	assert.Equal(t, eqCol1, eqCol2, "balance assertions must align at same column")
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+	assert.Equal(t, result, result2, "total lot price BA alignment must be idempotent")
+}
+
 func TestFormatDocument_WithLotPrice(t *testing.T) {
 	input := `2024-01-15 buy stocks
     assets:stocks  10 AAPL {$150}
@@ -1968,4 +2022,79 @@ func TestFormatDocument_WithLotDateAndLabel(t *testing.T) {
 	edits2 := FormatDocument(journal2, result)
 	result2 := applyEdits(result, edits2)
 	assert.Equal(t, result, result2, "lot annotations formatting must be idempotent")
+}
+
+func TestFormatDocument_WithLotPriceCRLF(t *testing.T) {
+	input := strings.ReplaceAll("2024-01-15 buy stocks\r\n    assets:stocks  10 AAPL {$150} @ $180\r\n    assets:cash\r\n", "\r\n", "\n")
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "{$150}")
+	assert.Contains(t, result, "@ $180")
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+	assert.Equal(t, result, result2, "lot price CRLF formatting must be idempotent")
+}
+
+func TestFormatDocument_WithConsolidatedLotDateCost(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {2026-01-15, $50}
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+	assert.Equal(t, result, result2, "consolidated lot (date+cost) formatting must be idempotent")
+}
+
+func TestFormatDocument_LotPriceUnicodeLabel(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {$150} (ロット1)
+    assets:cash  -$1500 = -$3000`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "(ロット1)")
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+	assert.Equal(t, result, result2, "lot price with CJK label must be idempotent")
+}
+
+func TestFormatDocument_WithConsolidatedLotAllFields(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {2026-01-15, "lot1", $50}
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+	assert.Equal(t, result, result2, "consolidated lot (all fields) formatting must be idempotent")
 }

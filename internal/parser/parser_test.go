@@ -3415,3 +3415,34 @@ func TestParser_PostingWithConsolidatedLabelAndCost(t *testing.T) {
 	require.NotNil(t, p.LotPrice.Cost)
 	assert.True(t, p.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(50)))
 }
+
+func TestParser_PostingWithLotPriceCRLF(t *testing.T) {
+	input := strings.ReplaceAll("2024-01-15 buy stocks\r\n    assets:stocks  10 AAPL {$150} @ $180\r\n    assets:cash\r\n", "\r\n", "\n")
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.LotPrice)
+	require.NotNil(t, p.LotPrice.Cost)
+	assert.Equal(t, "$", p.LotPrice.Cost.Commodity.Symbol)
+	assert.True(t, p.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(150)))
+	require.NotNil(t, p.Cost)
+	assert.True(t, p.Cost.Amount.Quantity.Equal(decimal.NewFromInt(180)))
+}
+
+func TestParser_PostingWithAllLotAnnotationsCRLF(t *testing.T) {
+	input := strings.ReplaceAll("2024-01-15 buy stocks\r\n    assets:stocks  10 AAPL {$150} [2024-01-15] (lot1)\r\n    assets:cash\r\n", "\r\n", "\n")
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.LotPrice)
+	require.NotNil(t, p.LotPrice.Cost)
+	assert.True(t, p.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(150)))
+	assert.Equal(t, "2024-01-15", p.LotPrice.Date)
+	assert.Equal(t, "lot1", p.LotPrice.Label)
+}

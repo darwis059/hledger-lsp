@@ -318,17 +318,17 @@ func calculateLotPriceLen(lot *ast.LotPrice, commodityFormats map[string]Commodi
 	length := 0
 	if lot.Cost != nil {
 		if lot.IsTotal {
-			length += 4 // " {{"  + "}}"
+			length += 5 // " {{" + "}}"
 		} else {
-			length += 2 // " {" + "}"
+			length += 3 // " {" + "}"
 		}
 		length += calculateSingleAmountLen(lot.Cost, commodityFormats)
 	}
 	if lot.Date != "" {
-		length += 3 + len(lot.Date) // " [" + date + "]"
+		length += 3 + utf8.RuneCountInString(lot.Date) // " [" + date + "]"
 	}
 	if lot.Label != "" {
-		length += 3 + len(lot.Label) // " (" + label + ")"
+		length += 3 + utf8.RuneCountInString(lot.Label) // " (" + label + ")"
 	}
 	return length
 }

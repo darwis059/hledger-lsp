@@ -594,28 +594,25 @@ func (p *Parser) parseCost() *ast.Cost {
 	return cost
 }
 
+func (p *Parser) ensureLotPrice(posting *ast.Posting) *ast.LotPrice {
+	if posting.LotPrice == nil {
+		posting.LotPrice = &ast.LotPrice{}
+		posting.LotPrice.Range.Start = toASTPosition(p.current.Pos)
+	}
+	return posting.LotPrice
+}
+
 func (p *Parser) parseLotAnnotations(posting *ast.Posting) {
 	for {
 		switch p.current.Type {
 		case TokenLBrace, TokenDoubleLBrace:
-			if posting.LotPrice == nil {
-				posting.LotPrice = &ast.LotPrice{}
-				posting.LotPrice.Range.Start = toASTPosition(p.current.Pos)
-			}
-			p.parseLotPriceInto(posting.LotPrice)
+			p.parseLotPriceInto(p.ensureLotPrice(posting))
 		case TokenLBracket:
-			if posting.LotPrice == nil {
-				posting.LotPrice = &ast.LotPrice{}
-				posting.LotPrice.Range.Start = toASTPosition(p.current.Pos)
-			}
-			p.parseLotDate(posting.LotPrice)
+			p.parseLotDate(p.ensureLotPrice(posting))
 		case TokenCode:
-			if posting.LotPrice == nil {
-				posting.LotPrice = &ast.LotPrice{}
-				posting.LotPrice.Range.Start = toASTPosition(p.current.Pos)
-			}
-			posting.LotPrice.Label = p.current.Value
-			posting.LotPrice.Range.End = toASTPosition(p.current.End)
+			lot := p.ensureLotPrice(posting)
+			lot.Label = p.current.Value
+			lot.Range.End = toASTPosition(p.current.End)
 			p.advance()
 		case TokenAt, TokenAtAt:
 			posting.Cost = p.parseCost()
