@@ -182,8 +182,10 @@ func (p *Parser) parsePeriodicTransaction() *ast.PeriodicTransaction {
 	p.advance()
 
 	// Parse period expression (e.g., "monthly", "every 2 weeks")
+	var periodPos Position
 	if p.current.Type == TokenText {
 		ptx.Period = strings.TrimSpace(p.current.Value)
+		periodPos = p.current.Pos
 		p.advance()
 	} else {
 		p.error("expected period expression after ~")
@@ -227,7 +229,16 @@ func (p *Parser) parsePeriodicTransaction() *ast.PeriodicTransaction {
 		}
 	case TokenPipe:
 		if idx := strings.Index(ptx.Period, "  "); idx >= 0 {
-			ptx.Payee = strings.TrimSpace(ptx.Period[idx:])
+			raw := ptx.Period[idx:]
+			ptx.Payee = strings.TrimSpace(raw)
+			leadingSpaces := len(raw) - len(strings.TrimLeft(raw, " \t"))
+			payeeStart := idx + leadingSpaces
+			payeePos := Position{
+				Line:   periodPos.Line,
+				Column: periodPos.Column + utf8.RuneCountInString(ptx.Period[:payeeStart]),
+				Offset: periodPos.Offset + payeeStart,
+			}
+			ptx.DescriptionRange = descRange(payeePos, ptx.Payee)
 			ptx.Period = strings.TrimSpace(ptx.Period[:idx])
 		}
 		p.advance()

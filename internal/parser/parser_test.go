@@ -481,6 +481,8 @@ func TestParser_PeriodicTransactionMultiplePipes(t *testing.T) {
 	ptx := journal.PeriodicTransactions[0]
 	assert.Equal(t, "Payee", ptx.Payee)
 	assert.Equal(t, "A | B", ptx.Note)
+	assert.Equal(t, "Payee | A | B", ptx.Description)
+	assert.NotZero(t, ptx.DescriptionRange)
 }
 
 func TestParser_CommentBlock(t *testing.T) {
