@@ -371,6 +371,28 @@ func TestAnalyzer_UndeclaredCommodity_BalanceAssertion(t *testing.T) {
 	assert.True(t, foundUndeclared, "expected UNDECLARED_COMMODITY diagnostic for balance assertion commodity EUR")
 }
 
+func TestAnalyzer_UndeclaredCommodity_ReportsEveryOccurrence(t *testing.T) {
+	input := `commodity AAPL
+
+2024-01-15 buy
+    assets:stocks  10 AAPL {$150}
+    assets:cash  $-1500`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	a := New()
+	result := a.Analyze(journal)
+
+	var dollarWarnings int
+	for _, d := range result.Diagnostics {
+		if d.Code == "UNDECLARED_COMMODITY" && d.Message == "commodity '$' has no directive" {
+			dollarWarnings++
+		}
+	}
+	assert.Equal(t, 2, dollarWarnings, "expected UNDECLARED_COMMODITY for every occurrence of '$'")
+}
+
 func TestAnalyzer_NoCommodityDirectives_NoDiagnostic(t *testing.T) {
 	input := `2024-01-15 test
     expenses:food  $50

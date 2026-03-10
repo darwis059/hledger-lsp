@@ -569,11 +569,9 @@ func collectDeclaredCommoditiesFromResolved(resolved *include.ResolvedJournal) m
 
 func checkUndeclaredCommodities(tx *ast.Transaction, declared map[string]bool) []Diagnostic {
 	var diags []Diagnostic
-	seen := make(map[string]bool)
 
 	checkCommodity := func(symbol string, r ast.Range) {
-		if symbol != "" && !declared[symbol] && !seen[symbol] {
-			seen[symbol] = true
+		if symbol != "" && !declared[symbol] {
 			diags = append(diags, Diagnostic{
 				Range:    r,
 				Severity: SeverityWarning,
