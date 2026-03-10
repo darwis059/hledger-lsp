@@ -79,6 +79,7 @@ type Posting struct {
 	Amount           *Amount
 	BalanceAssertion *BalanceAssertion
 	Cost             *Cost
+	LotPrice         *LotPrice
 	Comment          string
 	Tags             []Tag
 	Virtual          VirtualType
@@ -132,6 +133,14 @@ const (
 type Cost struct {
 	Amount  Amount
 	IsTotal bool
+	Range   Range
+}
+
+type LotPrice struct {
+	Cost    *Amount
+	IsTotal bool
+	Date    string
+	Label   string
 	Range   Range
 }
 

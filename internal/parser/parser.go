@@ -479,9 +479,7 @@ func (p *Parser) parsePosting() *ast.Posting {
 		}
 	}
 
-	if p.current.Type == TokenAt || p.current.Type == TokenAtAt {
-		posting.Cost = p.parseCost()
-	}
+	p.parseLotAnnotations(posting)
 
 	if p.current.Type == TokenEquals || p.current.Type == TokenDoubleEquals ||
 		p.current.Type == TokenEqualsStar || p.current.Type == TokenDoubleEqualsStar {
@@ -594,6 +592,128 @@ func (p *Parser) parseCost() *ast.Cost {
 	cost.Amount = *amount
 	cost.Range.End = toASTPosition(p.current.Pos)
 	return cost
+}
+
+func (p *Parser) parseLotAnnotations(posting *ast.Posting) {
+	for {
+		switch p.current.Type {
+		case TokenLBrace, TokenDoubleLBrace:
+			if posting.LotPrice == nil {
+				posting.LotPrice = &ast.LotPrice{}
+				posting.LotPrice.Range.Start = toASTPosition(p.current.Pos)
+			}
+			p.parseLotPriceInto(posting.LotPrice)
+		case TokenLBracket:
+			if posting.LotPrice == nil {
+				posting.LotPrice = &ast.LotPrice{}
+				posting.LotPrice.Range.Start = toASTPosition(p.current.Pos)
+			}
+			p.parseLotDate(posting.LotPrice)
+		case TokenCode:
+			if posting.LotPrice == nil {
+				posting.LotPrice = &ast.LotPrice{}
+				posting.LotPrice.Range.Start = toASTPosition(p.current.Pos)
+			}
+			posting.LotPrice.Label = p.current.Value
+			posting.LotPrice.Range.End = toASTPosition(p.current.End)
+			p.advance()
+		case TokenAt, TokenAtAt:
+			posting.Cost = p.parseCost()
+		default:
+			return
+		}
+	}
+}
+
+func (p *Parser) parseLotDate(lot *ast.LotPrice) {
+	p.advance() // consume [
+
+	switch p.current.Type {
+	case TokenDate:
+		lot.Date = p.current.Value
+		lot.Range.End = toASTPosition(p.current.End)
+		p.advance()
+	case TokenNumber:
+		date := p.current.Value
+		p.advance()
+		for p.current.Type == TokenSign || p.current.Type == TokenNumber {
+			date += p.current.Value
+			p.advance()
+		}
+		lot.Date = date
+		lot.Range.End = toASTPosition(p.current.Pos)
+	}
+
+	if p.current.Type == TokenRBracket {
+		lot.Range.End = toASTPosition(p.current.End)
+		p.advance()
+	}
+}
+
+func (p *Parser) looksLikeConsolidatedDate() bool {
+	if p.current.Type != TokenNumber || len(p.current.Value) != 4 {
+		return false
+	}
+	endOffset := p.current.End.Offset
+	if endOffset < len(p.lexer.input) && p.lexer.input[endOffset] == '-' {
+		return true
+	}
+	return false
+}
+
+func (p *Parser) parseConsolidatedDate() string {
+	date := p.current.Value
+	p.advance()
+	for p.current.Type == TokenSign || p.current.Type == TokenNumber {
+		date += p.current.Value
+		p.advance()
+	}
+	date = strings.TrimRight(date, ",")
+	return date
+}
+
+func (p *Parser) parseLotPriceInto(lot *ast.LotPrice) {
+	if p.current.Type == TokenDoubleLBrace {
+		lot.IsTotal = true
+	}
+	p.advance()
+
+	closingToken := TokenRBrace
+	if lot.IsTotal {
+		closingToken = TokenDoubleRBrace
+	}
+
+	if p.current.Type == closingToken {
+		lot.Range.End = toASTPosition(p.current.End)
+		p.advance()
+		return
+	}
+
+	if p.looksLikeConsolidatedDate() {
+		lot.Date = p.parseConsolidatedDate()
+	}
+
+	if p.current.Type == TokenQuotedCommodity {
+		lot.Label = p.current.Value
+		p.advance()
+		if p.current.Type == TokenText && strings.HasPrefix(p.current.Value, ",") {
+			p.advance()
+		}
+	}
+
+	if p.current.Type != closingToken {
+		if isCommodityToken(p.current.Type) || p.current.Type == TokenNumber || p.current.Type == TokenSign {
+			amount := p.parseAmount()
+			if amount != nil {
+				lot.Cost = amount
+			}
+		}
+	}
+
+	if p.current.Type == closingToken {
+		lot.Range.End = toASTPosition(p.current.End)
+		p.advance()
+	}
 }
 
 func (p *Parser) parseBalanceAssertion() *ast.BalanceAssertion {

@@ -33,6 +33,10 @@ const (
 	TokenQuotedCommodity  // commodity in double quotes, e.g. "VWCE"
 	TokenEqualsStar       // =*
 	TokenDoubleEqualsStar // ==*
+	TokenLBrace           // {
+	TokenDoubleLBrace     // {{
+	TokenRBrace           // }
+	TokenDoubleRBrace     // }}
 )
 
 type Position struct {
@@ -56,6 +60,7 @@ func (t TokenType) String() string {
 		"LParen", "RParen", "LBracket", "RBracket", "Pipe", "Colon", "Semicolon",
 		"Sign", "Tilde", "AutoRule", "QuotedCommodity",
 		"EqualsStar", "DoubleEqualsStar",
+		"LBrace", "DoubleLBrace", "RBrace", "DoubleRBrace",
 	}
 	if int(t) < len(names) {
 		return names[t]

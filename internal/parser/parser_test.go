@@ -3149,3 +3149,269 @@ D 1.000,00 EUR
 	assert.Equal(t, "1500", p.Amount.Quantity.String(),
 		"last D directive wins: comma decimal → 1.500 bare = 1500")
 }
+
+func TestParser_PostingWithLotPrice(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {$150}
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	assert.Equal(t, "assets:stocks", p.Account.Name)
+	require.NotNil(t, p.Amount)
+	assert.Equal(t, "AAPL", p.Amount.Commodity.Symbol)
+	assert.True(t, p.Amount.Quantity.Equal(decimal.NewFromInt(10)))
+
+	require.NotNil(t, p.LotPrice)
+	assert.False(t, p.LotPrice.IsTotal)
+	require.NotNil(t, p.LotPrice.Cost)
+	assert.Equal(t, "$", p.LotPrice.Cost.Commodity.Symbol)
+	assert.True(t, p.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(150)))
+}
+
+func TestParser_PostingWithTotalLotPrice(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {{$1500}}
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.LotPrice)
+	assert.True(t, p.LotPrice.IsTotal)
+	require.NotNil(t, p.LotPrice.Cost)
+	assert.True(t, p.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(1500)))
+}
+
+func TestParser_PostingWithEmptyLotPrice(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {}
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.LotPrice)
+	assert.False(t, p.LotPrice.IsTotal)
+	assert.Nil(t, p.LotPrice.Cost)
+}
+
+func TestParser_PostingWithLotPriceAndCost(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {$150} @ $180
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.LotPrice)
+	require.NotNil(t, p.LotPrice.Cost)
+	assert.Equal(t, "$", p.LotPrice.Cost.Commodity.Symbol)
+	assert.True(t, p.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(150)))
+
+	require.NotNil(t, p.Cost)
+	assert.Equal(t, "$", p.Cost.Amount.Commodity.Symbol)
+	assert.True(t, p.Cost.Amount.Quantity.Equal(decimal.NewFromInt(180)))
+}
+
+func TestParser_PostingWithCostThenLotPrice(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL @ $180 {$150}
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.Cost)
+	assert.True(t, p.Cost.Amount.Quantity.Equal(decimal.NewFromInt(180)))
+
+	require.NotNil(t, p.LotPrice)
+	require.NotNil(t, p.LotPrice.Cost)
+	assert.True(t, p.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(150)))
+}
+
+func TestParser_PostingWithNegativeAmountAndLotPrice(t *testing.T) {
+	input := `2024-01-15 sell stocks
+    assets:stocks  -10 AAPL {$150}
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.Amount)
+	assert.True(t, p.Amount.Quantity.Equal(decimal.NewFromInt(-10)))
+	require.NotNil(t, p.LotPrice)
+	require.NotNil(t, p.LotPrice.Cost)
+	assert.True(t, p.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(150)))
+}
+
+func TestParser_PostingWithLotPriceSuffixCommodity(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {150 USD}
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.LotPrice)
+	require.NotNil(t, p.LotPrice.Cost)
+	assert.Equal(t, "USD", p.LotPrice.Cost.Commodity.Symbol)
+	assert.True(t, p.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(150)))
+}
+
+func TestParser_PostingWithLotPriceAndBalanceAssertion(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {$150} = 20 AAPL
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.LotPrice)
+	require.NotNil(t, p.BalanceAssertion)
+	assert.Equal(t, "AAPL", p.BalanceAssertion.Amount.Commodity.Symbol)
+}
+
+func TestParser_PostingWithLotDate(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL [2024-01-15]
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.LotPrice)
+	assert.Equal(t, "2024-01-15", p.LotPrice.Date)
+}
+
+func TestParser_PostingWithLotLabel(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL (lot1)
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.LotPrice)
+	assert.Equal(t, "lot1", p.LotPrice.Label)
+}
+
+func TestParser_PostingWithAllLotAnnotations(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {$150} [2024-01-15] (lot1)
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.LotPrice)
+	require.NotNil(t, p.LotPrice.Cost)
+	assert.True(t, p.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(150)))
+	assert.Equal(t, "2024-01-15", p.LotPrice.Date)
+	assert.Equal(t, "lot1", p.LotPrice.Label)
+}
+
+func TestParser_PostingWithLotAnnotationsReversedOrder(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL [2024-01-15] {$150} (lot1)
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.LotPrice)
+	require.NotNil(t, p.LotPrice.Cost)
+	assert.True(t, p.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(150)))
+	assert.Equal(t, "2024-01-15", p.LotPrice.Date)
+	assert.Equal(t, "lot1", p.LotPrice.Label)
+}
+
+func TestParser_PostingWithConsolidatedLotDateAndCost(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {2026-01-15, $50}
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.LotPrice)
+	assert.Equal(t, "2026-01-15", p.LotPrice.Date)
+	require.NotNil(t, p.LotPrice.Cost)
+	assert.Equal(t, "$", p.LotPrice.Cost.Commodity.Symbol)
+	assert.True(t, p.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(50)))
+}
+
+func TestParser_PostingWithConsolidatedAllFields(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {2026-01-15, "lot1", $50}
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.LotPrice)
+	assert.Equal(t, "2026-01-15", p.LotPrice.Date)
+	assert.Equal(t, "lot1", p.LotPrice.Label)
+	require.NotNil(t, p.LotPrice.Cost)
+	assert.True(t, p.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(50)))
+}
+
+func TestParser_PostingWithConsolidatedDateOnly(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {2026-01-15}
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.LotPrice)
+	assert.Equal(t, "2026-01-15", p.LotPrice.Date)
+	assert.Nil(t, p.LotPrice.Cost)
+}
+
+func TestParser_PostingWithConsolidatedLabelAndCost(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {"lot1", $50}
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.LotPrice)
+	assert.Equal(t, "lot1", p.LotPrice.Label)
+	require.NotNil(t, p.LotPrice.Cost)
+	assert.True(t, p.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(50)))
+}

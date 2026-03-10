@@ -589,6 +589,9 @@ func checkUndeclaredCommodities(tx *ast.Transaction, declared map[string]bool) [
 		if posting.BalanceAssertion != nil {
 			checkCommodity(posting.BalanceAssertion.Amount.Commodity.Symbol, posting.BalanceAssertion.Amount.Commodity.Range)
 		}
+		if posting.LotPrice != nil && posting.LotPrice.Cost != nil {
+			checkCommodity(posting.LotPrice.Cost.Commodity.Symbol, posting.LotPrice.Cost.Commodity.Range)
+		}
 	}
 	return diags
 }

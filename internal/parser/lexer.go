@@ -21,6 +21,7 @@ type Lexer struct {
 	afterSign      bool
 	afterNumber    bool
 	virtualCloser  rune
+	insideBraces   int
 }
 
 func NewLexer(input string) *Lexer {
@@ -127,6 +128,10 @@ func (l *Lexer) scanInLine() Token {
 	case ch == '|':
 		l.advance()
 		return l.makeToken(TokenPipe, "|")
+	case ch == '{':
+		return l.scanLBrace()
+	case ch == '}':
+		return l.scanRBrace()
 	case ch == '@':
 		return l.scanAt()
 	case ch == '=':
@@ -202,6 +207,9 @@ func (l *Lexer) scanInLine() Token {
 		}
 		// Header line → Text
 		return l.scanText()
+	case ch == ',' && l.insideBraces > 0:
+		l.advance()
+		return l.makeToken(TokenText, ",")
 	default:
 		return l.scanText()
 	}
@@ -433,6 +441,34 @@ func (l *Lexer) scanQuotedCommodity() Token {
 	}
 
 	return Token{Type: TokenQuotedCommodity, Value: value, Pos: startPos, End: l.position()}
+}
+
+func (l *Lexer) scanLBrace() Token {
+	startPos := l.position()
+	l.advance()
+
+	if l.pos < len(l.input) && l.peek() == '{' {
+		l.advance()
+		l.insideBraces++
+		return Token{Type: TokenDoubleLBrace, Value: "{{", Pos: startPos, End: l.position()}
+	}
+
+	l.insideBraces++
+	return Token{Type: TokenLBrace, Value: "{", Pos: startPos, End: l.position()}
+}
+
+func (l *Lexer) scanRBrace() Token {
+	startPos := l.position()
+	l.advance()
+
+	if l.pos < len(l.input) && l.peek() == '}' {
+		l.advance()
+		l.insideBraces--
+		return Token{Type: TokenDoubleRBrace, Value: "}}", Pos: startPos, End: l.position()}
+	}
+
+	l.insideBraces--
+	return Token{Type: TokenRBrace, Value: "}", Pos: startPos, End: l.position()}
 }
 
 func (l *Lexer) scanAt() Token {

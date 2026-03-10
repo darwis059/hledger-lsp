@@ -2346,3 +2346,107 @@ func TestLexer_VirtualPostingsRegression(t *testing.T) {
 		})
 	}
 }
+
+func TestLexer_LotPrice(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []Token
+	}{
+		{
+			name:  "unit lot cost",
+			input: "    assets:stocks  10 AAPL {$150}",
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "assets:stocks"},
+				{Type: TokenNumber, Value: "10"},
+				{Type: TokenCommodity, Value: "AAPL"},
+				{Type: TokenLBrace, Value: "{"},
+				{Type: TokenCommodity, Value: "$"},
+				{Type: TokenNumber, Value: "150"},
+				{Type: TokenRBrace, Value: "}"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "total lot cost with double braces",
+			input: "    assets:stocks  10 AAPL {{$1500}}",
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "assets:stocks"},
+				{Type: TokenNumber, Value: "10"},
+				{Type: TokenCommodity, Value: "AAPL"},
+				{Type: TokenDoubleLBrace, Value: "{{"},
+				{Type: TokenCommodity, Value: "$"},
+				{Type: TokenNumber, Value: "1500"},
+				{Type: TokenDoubleRBrace, Value: "}}"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "empty lot braces",
+			input: "    assets:stocks  10 AAPL {}",
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "assets:stocks"},
+				{Type: TokenNumber, Value: "10"},
+				{Type: TokenCommodity, Value: "AAPL"},
+				{Type: TokenLBrace, Value: "{"},
+				{Type: TokenRBrace, Value: "}"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "lot cost with @ cost",
+			input: "    assets:stocks  10 AAPL {$150} @ $180",
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "assets:stocks"},
+				{Type: TokenNumber, Value: "10"},
+				{Type: TokenCommodity, Value: "AAPL"},
+				{Type: TokenLBrace, Value: "{"},
+				{Type: TokenCommodity, Value: "$"},
+				{Type: TokenNumber, Value: "150"},
+				{Type: TokenRBrace, Value: "}"},
+				{Type: TokenAt, Value: "@"},
+				{Type: TokenCommodity, Value: "$"},
+				{Type: TokenNumber, Value: "180"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "account name with curly braces not affected",
+			input: "    assets:stocks:{foo}  10 AAPL",
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "assets:stocks:{foo}"},
+				{Type: TokenNumber, Value: "10"},
+				{Type: TokenCommodity, Value: "AAPL"},
+				{Type: TokenEOF},
+			},
+		},
+		{
+			name:  "lot cost with suffix commodity",
+			input: "    assets:stocks  10 AAPL {150 USD}",
+			want: []Token{
+				{Type: TokenIndent, Value: "    "},
+				{Type: TokenAccount, Value: "assets:stocks"},
+				{Type: TokenNumber, Value: "10"},
+				{Type: TokenCommodity, Value: "AAPL"},
+				{Type: TokenLBrace, Value: "{"},
+				{Type: TokenNumber, Value: "150"},
+				{Type: TokenCommodity, Value: "USD"},
+				{Type: TokenRBrace, Value: "}"},
+				{Type: TokenEOF},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			tokens := collectTokens(lexer)
+			assertTokenTypesAndValues(t, tt.want, tokens)
+		})
+	}
+}

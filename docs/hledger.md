@@ -1164,11 +1164,35 @@ Accounts can hold multiple commodities:
 
 **Note:** You cannot write multi-commodity amounts directly in journal files - only single commodities per posting.
 
-### Lot Prices (Ledger compatibility)
+### Lot Prices / Cost Basis Annotations
 
+hledger supports lot syntax for tracking acquisition cost basis. These annotations are preserved
+but not used for balance calculations — only `@`/`@@` determines the transaction price.
+
+**Ledger-style** (separate annotations, any order):
+
+```text
+assets:stocks    10 AAPL {$150}              ; unit lot cost
+assets:stocks    10 AAPL {{$1500}}           ; total lot cost
+assets:stocks    10 AAPL [2024-01-15]        ; lot date
+assets:stocks    10 AAPL (lot1)              ; lot label
+assets:stocks    10 AAPL {$150} [2024-01-15] (lot1)  ; all combined
 ```
-assets:stocks    10 AAPL {$150}    ; Lot price (ignored by hledger)
-assets:stocks    10 AAPL {@$150}   ; hledger uses @ notation
+
+**hledger consolidated style** (all fields inside `{}`, comma-separated, order: date, label, cost):
+
+```text
+assets:stocks    10 AAPL {2026-01-15, $50}
+assets:stocks    10 AAPL {2026-01-15, "lot1", $50}
+assets:stocks    10 AAPL {$50}
+assets:stocks    10 AAPL {}
+```
+
+Lot annotations can appear before or after `@`/`@@` cost:
+
+```text
+assets:stocks    10 AAPL {$150} @ $180
+assets:stocks    10 AAPL @ $180 {$150}
 ```
 
 ---

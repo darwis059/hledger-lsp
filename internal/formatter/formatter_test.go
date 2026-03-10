@@ -1886,3 +1886,86 @@ func TestFormatDocument_MixedQuotedAndUnquotedAlignment(t *testing.T) {
 	assert.Equal(t, result, result2,
 		"mixed quoted/unquoted alignment must be idempotent")
 }
+
+func TestFormatDocument_WithLotPrice(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {$150}
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "{$150}")
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+	assert.Equal(t, result, result2, "lot price formatting must be idempotent")
+}
+
+func TestFormatDocument_WithTotalLotPrice(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {{$1500}}
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "{{$1500}}")
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+	assert.Equal(t, result, result2, "total lot price formatting must be idempotent")
+}
+
+func TestFormatDocument_WithLotPriceAndCost(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {$150} @ $180
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "{$150}")
+	assert.Contains(t, result, "@ $180")
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+	assert.Equal(t, result, result2, "lot+cost formatting must be idempotent")
+}
+
+func TestFormatDocument_WithLotDateAndLabel(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {$150} [2024-01-15] (lot1)
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "{$150}")
+	assert.Contains(t, result, "[2024-01-15]")
+	assert.Contains(t, result, "(lot1)")
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+	assert.Equal(t, result, result2, "lot annotations formatting must be idempotent")
+}

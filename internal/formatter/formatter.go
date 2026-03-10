@@ -298,6 +298,10 @@ func calculateAmountCostLen(posting *ast.Posting, commodityFormats map[string]Co
 
 	length := calculateSingleAmountLen(posting.Amount, commodityFormats)
 
+	if posting.LotPrice != nil {
+		length += calculateLotPriceLen(posting.LotPrice, commodityFormats)
+	}
+
 	if posting.Cost != nil {
 		if posting.Cost.IsTotal {
 			length += 4 // " @@ "
@@ -307,6 +311,25 @@ func calculateAmountCostLen(posting *ast.Posting, commodityFormats map[string]Co
 		length += calculateSingleAmountLen(&posting.Cost.Amount, commodityFormats)
 	}
 
+	return length
+}
+
+func calculateLotPriceLen(lot *ast.LotPrice, commodityFormats map[string]CommodityFormat) int {
+	length := 0
+	if lot.Cost != nil {
+		if lot.IsTotal {
+			length += 4 // " {{"  + "}}"
+		} else {
+			length += 2 // " {" + "}"
+		}
+		length += calculateSingleAmountLen(lot.Cost, commodityFormats)
+	}
+	if lot.Date != "" {
+		length += 3 + len(lot.Date) // " [" + date + "]"
+	}
+	if lot.Label != "" {
+		length += 3 + len(lot.Label) // " (" + label + ")"
+	}
 	return length
 }
 
@@ -371,6 +394,10 @@ func formatPostingWithOpts(posting *ast.Posting, alignment AlignmentInfo, commod
 		sb.WriteString(strings.Repeat(" ", spaces))
 
 		writeAmountWithSign(&sb, posting.Amount, commodityFormats)
+	}
+
+	if posting.LotPrice != nil {
+		writeLotPrice(&sb, posting.LotPrice, commodityFormats)
 	}
 
 	if posting.Cost != nil {
@@ -450,6 +477,34 @@ func commoditySymbolDisplay(c *ast.Commodity) string {
 		return `"` + c.Symbol + `"`
 	}
 	return c.Symbol
+}
+
+func writeLotPrice(sb *strings.Builder, lot *ast.LotPrice, commodityFormats map[string]CommodityFormat) {
+	if lot.Cost != nil {
+		if lot.IsTotal {
+			sb.WriteString(" {{")
+		} else {
+			sb.WriteString(" {")
+		}
+		writeAmountWithSign(sb, lot.Cost, commodityFormats)
+		if lot.IsTotal {
+			sb.WriteString("}}")
+		} else {
+			sb.WriteString("}")
+		}
+	}
+
+	if lot.Date != "" {
+		sb.WriteString(" [")
+		sb.WriteString(lot.Date)
+		sb.WriteString("]")
+	}
+
+	if lot.Label != "" {
+		sb.WriteString(" (")
+		sb.WriteString(lot.Label)
+		sb.WriteString(")")
+	}
 }
 
 func writeAmountWithSign(sb *strings.Builder, amount *ast.Amount, commodityFormats map[string]CommodityFormat) {

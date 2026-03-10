@@ -109,6 +109,13 @@ func CollectCommodities(journal *ast.Journal) []string {
 					commodities = append(commodities, symbol)
 				}
 			}
+			if posting.LotPrice != nil && posting.LotPrice.Cost != nil {
+				symbol := posting.LotPrice.Cost.Commodity.Symbol
+				if symbol != "" && !seen[symbol] {
+					seen[symbol] = true
+					commodities = append(commodities, symbol)
+				}
+			}
 		}
 	}
 
@@ -347,6 +354,9 @@ func CollectCommodityCounts(journal *ast.Journal) map[string]int {
 			}
 			if posting.Cost != nil && posting.Cost.Amount.Commodity.Symbol != "" {
 				counts[posting.Cost.Amount.Commodity.Symbol]++
+			}
+			if posting.LotPrice != nil && posting.LotPrice.Cost != nil && posting.LotPrice.Cost.Commodity.Symbol != "" {
+				counts[posting.LotPrice.Cost.Commodity.Symbol]++
 			}
 		}
 	}
