@@ -139,10 +139,7 @@ func (p *Parser) parseTransaction() *ast.Transaction {
 			tx.Payee = strings.TrimSpace(desc)
 			tx.DescriptionRange = descRange(descPos, tx.Payee)
 			p.advance()
-			if p.current.Type == TokenText {
-				tx.Note = strings.TrimSpace(p.current.Value)
-				p.advance()
-			}
+			tx.Note = p.parseNote()
 			tx.Description = tx.Payee
 			if tx.Note != "" {
 				tx.Description = tx.Payee + " | " + tx.Note
@@ -206,7 +203,11 @@ func (p *Parser) parsePeriodicTransaction() *ast.PeriodicTransaction {
 	}
 
 	// Parse optional description
-	if p.current.Type == TokenText {
+	// Period text may include the description when separated by |
+	// e.g. "~ monthly from 2024-01  Payee | note" — scanText returns
+	// "monthly from 2024-01  Payee" as one token, then TokenPipe follows.
+	switch p.current.Type {
+	case TokenText:
 		desc := p.current.Value
 		descPos := p.current.Pos
 		p.advance()
@@ -215,10 +216,7 @@ func (p *Parser) parsePeriodicTransaction() *ast.PeriodicTransaction {
 			ptx.Payee = strings.TrimSpace(desc)
 			ptx.DescriptionRange = descRange(descPos, ptx.Payee)
 			p.advance()
-			if p.current.Type == TokenText {
-				ptx.Note = strings.TrimSpace(p.current.Value)
-				p.advance()
-			}
+			ptx.Note = p.parseNote()
 			ptx.Description = ptx.Payee
 			if ptx.Note != "" {
 				ptx.Description = ptx.Payee + " | " + ptx.Note
@@ -226,6 +224,19 @@ func (p *Parser) parsePeriodicTransaction() *ast.PeriodicTransaction {
 		} else {
 			ptx.Description = desc
 			ptx.DescriptionRange = descRange(descPos, desc)
+		}
+	case TokenPipe:
+		if idx := strings.Index(ptx.Period, "  "); idx >= 0 {
+			ptx.Payee = strings.TrimSpace(ptx.Period[idx:])
+			ptx.Period = strings.TrimSpace(ptx.Period[:idx])
+		}
+		p.advance()
+		ptx.Note = p.parseNote()
+		if ptx.Payee != "" {
+			ptx.Description = ptx.Payee
+			if ptx.Note != "" {
+				ptx.Description = ptx.Payee + " | " + ptx.Note
+			}
 		}
 	}
 
@@ -1182,6 +1193,15 @@ func (p *Parser) parseYearDirective(startPos Position) ast.Directive {
 	dir.Range.End = toASTPosition(p.current.Pos)
 	p.skipToNextLine()
 	return dir
+}
+
+func (p *Parser) parseNote() string {
+	var parts []string
+	for p.current.Type == TokenText || p.current.Type == TokenPipe {
+		parts = append(parts, p.current.Value)
+		p.advance()
+	}
+	return strings.TrimSpace(strings.Join(parts, " "))
 }
 
 func (p *Parser) parseComment() ast.Comment {

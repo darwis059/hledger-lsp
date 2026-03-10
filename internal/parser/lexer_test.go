@@ -125,6 +125,23 @@ func TestLexer_DescriptionWithPipe(t *testing.T) {
 	assertTokenTypesAndValues(t, expected, tokens)
 }
 
+func TestLexer_DescriptionWithMultiplePipes(t *testing.T) {
+	input := "2024-01-15 Payee | A | B"
+	lexer := NewLexer(input)
+	tokens := collectTokens(lexer)
+
+	expected := []Token{
+		{Type: TokenDate, Value: "2024-01-15"},
+		{Type: TokenText, Value: "Payee"},
+		{Type: TokenPipe, Value: "|"},
+		{Type: TokenText, Value: "A"},
+		{Type: TokenPipe, Value: "|"},
+		{Type: TokenText, Value: "B"},
+		{Type: TokenEOF},
+	}
+	assertTokenTypesAndValues(t, expected, tokens)
+}
+
 func TestLexer_Comment(t *testing.T) {
 	tests := []struct {
 		name  string

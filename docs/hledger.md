@@ -118,9 +118,12 @@ Text after date/status/code until end of line or semicolon.
 
 ```
 2024-01-15 Whole Foods | Groceries for party
+2024-01-15 PAYEE | MY DESCRIPTION | BANK'S CSV DESCRIPTION
 ```
 
-The pipe `|` divides description into queryable `payee` and `note` fields.
+The first `|` divides description into queryable `payee` (left) and `note` (right) fields.
+Only the first `|` is significant — any subsequent `|` characters are part of the note text.
+For example, `PAYEE | A | B` produces payee=`PAYEE` and note=`A | B`.
 
 ---
 

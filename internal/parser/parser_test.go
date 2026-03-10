@@ -304,6 +304,50 @@ func TestParser_ColonAfterPipe(t *testing.T) {
 	assert.Equal(t, "Magic: The Gathering Arena", tx.Note)
 }
 
+func TestParser_MultiplePipesInDescription(t *testing.T) {
+	input := `2024-01-15 PAYEE | MY DESCRIPTION | BANK CSV
+    expenses:food  $50
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	tx := journal.Transactions[0]
+	assert.Equal(t, "PAYEE", tx.Payee)
+	assert.Equal(t, "MY DESCRIPTION | BANK CSV", tx.Note)
+	assert.Equal(t, "PAYEE | MY DESCRIPTION | BANK CSV", tx.Description)
+}
+
+func TestParser_ThreePipesInDescription(t *testing.T) {
+	input := `2024-01-15 P | A | B | C
+    expenses:food  $50
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	tx := journal.Transactions[0]
+	assert.Equal(t, "P", tx.Payee)
+	assert.Equal(t, "A | B | C", tx.Note)
+}
+
+func TestParser_MultiplePipesWithComment(t *testing.T) {
+	input := `2024-01-15 PAYEE | A | B ; tag:val
+    expenses:food  $50
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	tx := journal.Transactions[0]
+	assert.Equal(t, "PAYEE", tx.Payee)
+	assert.Equal(t, "A | B", tx.Note)
+	require.Len(t, tx.Comments, 1)
+}
+
 func TestParser_QuotesInDescription(t *testing.T) {
 	input := `2026-01-20 Art shop | "Mona Lisa" print
     Expenses:Home    £20
@@ -423,6 +467,20 @@ func TestParser_PeriodicTransaction(t *testing.T) {
 	assert.Equal(t, "monthly", ptx.Period)
 	require.Len(t, ptx.Postings, 2)
 	assert.Equal(t, "expenses:rent", ptx.Postings[0].Account.Name)
+}
+
+func TestParser_PeriodicTransactionMultiplePipes(t *testing.T) {
+	input := `~ monthly from 2024-01  Payee | A | B
+    expenses:rent    $2000
+    assets:checking
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.PeriodicTransactions, 1)
+
+	ptx := journal.PeriodicTransactions[0]
+	assert.Equal(t, "Payee", ptx.Payee)
+	assert.Equal(t, "A | B", ptx.Note)
 }
 
 func TestParser_CommentBlock(t *testing.T) {
