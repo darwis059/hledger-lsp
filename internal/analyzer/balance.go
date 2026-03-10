@@ -4,9 +4,10 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/juev/hledger-lsp/internal/ast"
+	"github.com/juev/hledger-lsp/internal/formatter"
 )
 
-func CheckBalance(tx *ast.Transaction, userTolerance decimal.Decimal) *BalanceResult {
+func CheckBalance(tx *ast.Transaction, userTolerance decimal.Decimal, directivePrecisions map[string]int32) *BalanceResult {
 	result := NewBalanceResult()
 
 	realPostings := filterRealPostings(tx.Postings)
@@ -27,6 +28,11 @@ func CheckBalance(tx *ast.Transaction, userTolerance decimal.Decimal) *BalanceRe
 	}
 
 	precisions := maxPrecisionByCommodity(realPostings)
+	for commodity, dp := range directivePrecisions {
+		if dp > precisions[commodity] {
+			precisions[commodity] = dp
+		}
+	}
 
 	for commodity, sum := range balances {
 		tolerance := toleranceForPrecision(precisions[commodity])
@@ -94,6 +100,29 @@ func maxPrecisionByCommodity(postings []ast.Posting) map[string]int32 {
 
 func toleranceForPrecision(precision int32) decimal.Decimal {
 	return decimal.New(5, -precision-1)
+}
+
+func ExtractDirectivePrecisions(directives []ast.Directive) map[string]int32 {
+	precisions := make(map[string]int32)
+	for _, d := range directives {
+		switch d := d.(type) {
+		case ast.CommodityDirective:
+			if d.Format != "" {
+				nf := formatter.ParseNumberFormat(d.Format)
+				if nf.HasDecimal {
+					precisions[d.Commodity.Symbol] = int32(nf.DecimalPlaces)
+				}
+			}
+		case ast.DefaultCommodityDirective:
+			if d.Format != "" && d.Symbol != "" {
+				nf := formatter.ParseNumberFormat(d.Format)
+				if nf.HasDecimal {
+					precisions[d.Symbol] = int32(nf.DecimalPlaces)
+				}
+			}
+		}
+	}
+	return precisions
 }
 
 func sumByCommodity(postings []ast.Posting) map[string]decimal.Decimal {

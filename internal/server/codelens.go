@@ -33,7 +33,7 @@ func (s *Server) CodeLens(_ context.Context, params *protocol.CodeLensParams) ([
 
 	for i := range journal.Transactions {
 		tx := &journal.Transactions[i]
-		result := analyzer.CheckBalance(tx, decimal.NewFromFloat(settings.Diagnostics.BalanceTolerance))
+		result := analyzer.CheckBalance(tx, decimal.NewFromFloat(settings.Diagnostics.BalanceTolerance), nil)
 
 		title := buildCodeLensTitle(result, len(tx.Postings))
 		lenses = append(lenses, protocol.CodeLens{

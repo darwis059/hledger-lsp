@@ -56,9 +56,11 @@ func (a *Analyzer) analyzeInternal(journal *ast.Journal, external ExternalDeclar
 		declaredCommodities[k] = true
 	}
 
+	directivePrecisions := ExtractDirectivePrecisions(journal.Directives)
+
 	for i := range journal.Transactions {
 		tx := &journal.Transactions[i]
-		balanceResult := CheckBalance(tx, a.BalanceTolerance)
+		balanceResult := CheckBalance(tx, a.BalanceTolerance, directivePrecisions)
 
 		if !balanceResult.Balanced {
 			diag := a.createBalanceDiagnostic(tx, balanceResult)
@@ -125,9 +127,11 @@ func (a *Analyzer) AnalyzeResolved(resolved *include.ResolvedJournal) *AnalysisR
 	declaredAccounts := collectDeclaredAccountsFromResolved(resolved)
 	declaredCommodities := collectDeclaredCommoditiesFromResolved(resolved)
 
+	directivePrecisions := ExtractDirectivePrecisions(resolved.Primary.Directives)
+
 	for i := range resolved.Primary.Transactions {
 		tx := &resolved.Primary.Transactions[i]
-		balanceResult := CheckBalance(tx, a.BalanceTolerance)
+		balanceResult := CheckBalance(tx, a.BalanceTolerance, directivePrecisions)
 
 		if !balanceResult.Balanced {
 			diag := a.createBalanceDiagnostic(tx, balanceResult)

@@ -905,3 +905,64 @@ func TestParser_AccountWithoutColon(t *testing.T) {
 	// Second posting should have account "expenses"
 	assert.Equal(t, "expenses", journal.Transactions[0].Postings[1].Account.Name)
 }
+
+func TestAnalyzer_CommodityDirectivePrecision_NoFalsePositive(t *testing.T) {
+	// 3 * 33.333 = 99.999; balance = 99.999 - 100 = -0.001
+	// Without directive: precision 0, tolerance 0.5 → balanced
+	// With directive precision 2: tolerance 0.005, |0.001| < 0.005 → balanced
+	input := `commodity $1,000.00
+
+2024-01-15 buy
+    assets:stock  3 AAPL @ $33.333
+    assets:cash  -$100`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	a := New()
+	result := a.Analyze(journal)
+
+	for _, d := range result.Diagnostics {
+		if d.Code == "UNBALANCED" {
+			t.Errorf("unexpected UNBALANCED diagnostic: commodity directive precision should prevent false positive: %s", d.Message)
+		}
+	}
+}
+
+func TestAnalyzer_CommodityDirective_NoPrecision_Balanced(t *testing.T) {
+	// commodity $1. → has decimal mark but 0 decimal places → precision 0
+	// Same transaction: precision 0, tolerance 0.5, diff 0.001 → balanced
+	input := `commodity $1.
+
+2024-01-15 buy
+    assets:stock  3 AAPL @ $33.333
+    assets:cash  -$100`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	a := New()
+	result := a.Analyze(journal)
+
+	for _, d := range result.Diagnostics {
+		if d.Code == "UNBALANCED" {
+			t.Errorf("unexpected UNBALANCED: precision 0 → tolerance 0.5, diff 0.001 should balance: %s", d.Message)
+		}
+	}
+}
+
+func TestAnalyzer_CommodityDirectivePrecision_CRLF(t *testing.T) {
+	input := strings.ReplaceAll("commodity $1,000.00\r\n\r\n2024-01-15 buy\r\n    assets:stock  3 AAPL @ $33.333\r\n    assets:cash  -$100\r\n", "\r\n", "\n")
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	a := New()
+	result := a.Analyze(journal)
+
+	for _, d := range result.Diagnostics {
+		if d.Code == "UNBALANCED" {
+			t.Errorf("unexpected UNBALANCED diagnostic (CRLF variant): %s", d.Message)
+		}
+	}
+}
