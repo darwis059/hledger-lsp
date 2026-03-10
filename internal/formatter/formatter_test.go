@@ -276,6 +276,47 @@ func findEqualSignIndex(s string) int {
 	return -1
 }
 
+func TestFormatDocument_InclusiveBalanceAssertion(t *testing.T) {
+	input := `2024-01-15 check
+    assets:checking  $100 =* $1000
+    income:salary`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "=* $1000")
+	assert.NotContains(t, result, "== ")
+
+	journal2, errs2 := parser.Parse(result)
+	require.Empty(t, errs2)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+	assert.Equal(t, result, result2, "formatting should be idempotent")
+}
+
+func TestFormatDocument_ExactInclusiveBalanceAssertion(t *testing.T) {
+	input := `2024-01-15 check
+    assets:checking  $100 ==* $1000
+    income:salary`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "==* $1000")
+
+	journal2, errs2 := parser.Parse(result)
+	require.Empty(t, errs2)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+	assert.Equal(t, result, result2, "formatting should be idempotent")
+}
+
 func TestFormatDocument_GlobalAlignment(t *testing.T) {
 	input := `2024-01-15 first
     short:a  100 RUB

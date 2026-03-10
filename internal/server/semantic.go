@@ -534,7 +534,7 @@ func mapTokenType(t parser.TokenType) (uint32, bool) {
 		return TokenTypeCommodity, true
 	case parser.TokenComment:
 		return TokenTypeComment, true
-	case parser.TokenAt, parser.TokenAtAt, parser.TokenEquals, parser.TokenDoubleEquals, parser.TokenPipe:
+	case parser.TokenAt, parser.TokenAtAt, parser.TokenEquals, parser.TokenDoubleEquals, parser.TokenEqualsStar, parser.TokenDoubleEqualsStar, parser.TokenPipe:
 		return TokenTypeOperator, true
 	case parser.TokenText:
 		return TokenTypeString, true

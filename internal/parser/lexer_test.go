@@ -275,6 +275,42 @@ func TestLexer_BalanceAssertion(t *testing.T) {
 	assertTokenTypesAndValues(t, expected, tokens)
 }
 
+func TestLexer_InclusiveBalanceAssertion(t *testing.T) {
+	input := "    assets:checking  $100 =* $1000"
+	lexer := NewLexer(input)
+	tokens := collectTokens(lexer)
+
+	expected := []Token{
+		{Type: TokenIndent, Value: "    "},
+		{Type: TokenAccount, Value: "assets:checking"},
+		{Type: TokenCommodity, Value: "$"},
+		{Type: TokenNumber, Value: "100"},
+		{Type: TokenEqualsStar, Value: "=*"},
+		{Type: TokenCommodity, Value: "$"},
+		{Type: TokenNumber, Value: "1000"},
+		{Type: TokenEOF},
+	}
+	assertTokenTypesAndValues(t, expected, tokens)
+}
+
+func TestLexer_ExactInclusiveBalanceAssertion(t *testing.T) {
+	input := "    assets:checking  $100 ==* $1000"
+	lexer := NewLexer(input)
+	tokens := collectTokens(lexer)
+
+	expected := []Token{
+		{Type: TokenIndent, Value: "    "},
+		{Type: TokenAccount, Value: "assets:checking"},
+		{Type: TokenCommodity, Value: "$"},
+		{Type: TokenNumber, Value: "100"},
+		{Type: TokenDoubleEqualsStar, Value: "==*"},
+		{Type: TokenCommodity, Value: "$"},
+		{Type: TokenNumber, Value: "1000"},
+		{Type: TokenEOF},
+	}
+	assertTokenTypesAndValues(t, expected, tokens)
+}
+
 func TestLexer_Directive(t *testing.T) {
 	tests := []struct {
 		name  string

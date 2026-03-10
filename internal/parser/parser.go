@@ -472,7 +472,8 @@ func (p *Parser) parsePosting() *ast.Posting {
 		posting.Cost = p.parseCost()
 	}
 
-	if p.current.Type == TokenEquals || p.current.Type == TokenDoubleEquals {
+	if p.current.Type == TokenEquals || p.current.Type == TokenDoubleEquals ||
+		p.current.Type == TokenEqualsStar || p.current.Type == TokenDoubleEqualsStar {
 		posting.BalanceAssertion = p.parseBalanceAssertion()
 	}
 
@@ -588,8 +589,14 @@ func (p *Parser) parseBalanceAssertion() *ast.BalanceAssertion {
 	ba := &ast.BalanceAssertion{}
 	ba.Range.Start = toASTPosition(p.current.Pos)
 
-	if p.current.Type == TokenDoubleEquals {
+	switch p.current.Type {
+	case TokenDoubleEquals:
 		ba.IsStrict = true
+	case TokenEqualsStar:
+		ba.IsInclusive = true
+	case TokenDoubleEqualsStar:
+		ba.IsStrict = true
+		ba.IsInclusive = true
 	}
 	p.advance()
 

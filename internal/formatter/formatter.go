@@ -391,9 +391,14 @@ func formatPostingWithOpts(posting *ast.Posting, alignment AlignmentInfo, commod
 			sb.WriteString(strings.Repeat(" ", minSpaces))
 		}
 
-		if posting.BalanceAssertion.IsStrict {
+		switch {
+		case posting.BalanceAssertion.IsStrict && posting.BalanceAssertion.IsInclusive:
+			sb.WriteString("==* ")
+		case posting.BalanceAssertion.IsStrict:
 			sb.WriteString("== ")
-		} else {
+		case posting.BalanceAssertion.IsInclusive:
+			sb.WriteString("=* ")
+		default:
 			sb.WriteString("= ")
 		}
 		writeAmountWithSign(&sb, &posting.BalanceAssertion.Amount, commodityFormats)

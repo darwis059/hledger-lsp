@@ -620,6 +620,55 @@ func TestParser_StrictBalanceAssertion(t *testing.T) {
 	assert.True(t, p.BalanceAssertion.IsStrict)
 }
 
+func TestParser_InclusiveBalanceAssertion(t *testing.T) {
+	input := `2024-01-15 check balance
+    assets:checking  $100 =* $1000
+    income:salary`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.BalanceAssertion)
+	assert.False(t, p.BalanceAssertion.IsStrict)
+	assert.True(t, p.BalanceAssertion.IsInclusive)
+	assert.True(t, p.BalanceAssertion.Amount.Quantity.Equal(decimal.NewFromInt(1000)))
+}
+
+func TestParser_ExactInclusiveBalanceAssertion(t *testing.T) {
+	input := `2024-01-15 check balance
+    assets:checking  $100 ==* $1000
+    income:salary`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.BalanceAssertion)
+	assert.True(t, p.BalanceAssertion.IsStrict)
+	assert.True(t, p.BalanceAssertion.IsInclusive)
+	assert.True(t, p.BalanceAssertion.Amount.Quantity.Equal(decimal.NewFromInt(1000)))
+}
+
+func TestParser_InclusiveBalanceAssertionWithCost(t *testing.T) {
+	input := `2024-01-15 check balance
+    assets:checking  100 USD @ $1.10 =* 100 USD
+    income:salary`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.Cost)
+	require.NotNil(t, p.BalanceAssertion)
+	assert.True(t, p.BalanceAssertion.IsInclusive)
+	assert.False(t, p.BalanceAssertion.IsStrict)
+	assert.Equal(t, "USD", p.BalanceAssertion.Amount.Commodity.Symbol)
+}
+
 func TestParser_AccountDirective(t *testing.T) {
 	input := `account expenses:food`
 

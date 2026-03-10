@@ -453,7 +453,16 @@ func (l *Lexer) scanEquals() Token {
 
 	if l.pos < len(l.input) && l.peek() == '=' {
 		l.advance()
+		if l.pos < len(l.input) && l.peek() == '*' {
+			l.advance()
+			return Token{Type: TokenDoubleEqualsStar, Value: "==*", Pos: startPos, End: l.position()}
+		}
 		return Token{Type: TokenDoubleEquals, Value: "==", Pos: startPos, End: l.position()}
+	}
+
+	if l.pos < len(l.input) && l.peek() == '*' {
+		l.advance()
+		return Token{Type: TokenEqualsStar, Value: "=*", Pos: startPos, End: l.position()}
 	}
 
 	return Token{Type: TokenEquals, Value: "=", Pos: startPos, End: l.position()}
