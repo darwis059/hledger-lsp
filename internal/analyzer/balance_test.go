@@ -648,3 +648,78 @@ D $1,000.000
 	assert.Equal(t, int32(3), precisions["$"],
 		"D directive (precision 3) appears after commodity directive (precision 2), last-write-wins → 3")
 }
+
+func TestCheckBalance_LotCost_UnitPrice(t *testing.T) {
+	// 10 AAPL {$150} = 10 * $150 = $1500; cash -$1500 → balanced
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {$150}
+    assets:cash  $-1500`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero, nil)
+	assert.True(t, result.Balanced, "lot unit cost {$150} should work like @ $150 for balance")
+}
+
+func TestCheckBalance_LotCost_TotalPrice(t *testing.T) {
+	// 10 AAPL {{$1500}} = total $1500; cash -$1500 → balanced
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {{$1500}}
+    assets:cash  $-1500`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero, nil)
+	assert.True(t, result.Balanced, "lot total cost {{$1500}} should work like @@ $1500 for balance")
+}
+
+func TestCheckBalance_LotCost_WithCost_CostWins(t *testing.T) {
+	// 10 AAPL {$150} @ $180 → Cost ($180) used for balance, not LotPrice ($150)
+	// Balance: 10 * $180 = $1800; cash -$1800 → balanced
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {$150} @ $180
+    assets:cash  $-1800`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero, nil)
+	assert.True(t, result.Balanced, "when both Cost and LotPrice exist, Cost @ should be used for balance")
+}
+
+func TestCheckBalance_LotCost_Unbalanced(t *testing.T) {
+	// 10 AAPL {$150} = $1500; cash -$1400 → off by $100
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {$150}
+    assets:cash  $-1400`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero, nil)
+	assert.False(t, result.Balanced, "lot cost with wrong amount should be unbalanced")
+	assert.Equal(t, decimal.NewFromInt(100), result.Differences["$"])
+}
+
+func TestCheckBalance_LotCost_PrecisionMapping(t *testing.T) {
+	// 3.000 AAPL {$33.337} = 3.000 * 33.337 = 100.011; diff = 0.011
+	// Without fix: prec 3 mapped to AAPL (wrong); $ gets prec 0 → tolerance 0.5 → balanced
+	// With fix: prec 3 mapped to $ (correct); $ gets max(3,0) = 3 → tolerance 0.0005 → unbalanced
+	input := `2024-01-15 buy
+    assets:stocks  3.000 AAPL {$33.337}
+    assets:cash  -$100`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero, nil)
+	assert.False(t, result.Balanced,
+		"lot cost precision mapping: posting prec 3 mapped to $ → tolerance 0.0005, diff 0.011 exceeds tolerance")
+}

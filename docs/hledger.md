@@ -176,7 +176,8 @@ All posting amounts in a transaction must sum to zero (within balancing precisio
 
 - Inferred from the highest decimal precision used in each commodity within the transaction
 - `commodity` and `D` directive precision is factored in as a floor (e.g. `commodity $1,000.00` sets minimum precision 2 for `$`)
-- Cost amounts don't affect balancing precision
+- Cost amounts (`@`/`@@`) don't affect balancing precision
+- Lot costs (`{}`/`{{}}`) are treated as `@`/`@@` for balance checking when no explicit cost is present
 - Example: if one posting uses `$1.00` and another `$1.5`, precision is 2 decimals
 
 **One amount can be omitted:**
