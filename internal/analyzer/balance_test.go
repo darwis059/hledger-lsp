@@ -630,3 +630,21 @@ func TestCheckBalance_MultiCommodity_OneExceedsTolerance(t *testing.T) {
 	assert.False(t, result.Balanced, "CHF exceeds tolerance even though EUR is within")
 	assert.Contains(t, result.Differences, "CHF")
 }
+
+func TestExtractDirectivePrecisions_ConflictingCommodityAndD(t *testing.T) {
+	// When both commodity and D define precision for the same symbol,
+	// the last directive in parse order wins (last-write-wins).
+	input := `commodity $1,000.00
+D $1,000.000
+
+2024-01-15 test
+    expenses:food  $50
+    assets:cash  $-50`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	precisions := ExtractDirectivePrecisions(journal.Directives)
+	assert.Equal(t, int32(3), precisions["$"],
+		"D directive (precision 3) appears after commodity directive (precision 2), last-write-wins → 3")
+}

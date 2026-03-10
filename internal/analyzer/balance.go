@@ -5,6 +5,7 @@ import (
 
 	"github.com/juev/hledger-lsp/internal/ast"
 	"github.com/juev/hledger-lsp/internal/formatter"
+	"github.com/juev/hledger-lsp/internal/include"
 )
 
 func CheckBalance(tx *ast.Transaction, userTolerance decimal.Decimal, directivePrecisions map[string]int32) *BalanceResult {
@@ -119,6 +120,25 @@ func ExtractDirectivePrecisions(directives []ast.Directive) map[string]int32 {
 				if nf.HasDecimal {
 					precisions[d.Symbol] = int32(nf.DecimalPlaces)
 				}
+			}
+		}
+	}
+	return precisions
+}
+
+func extractDirectivePrecisionsFromResolved(resolved *include.ResolvedJournal) map[string]int32 {
+	precisions := make(map[string]int32)
+	if resolved.Primary != nil {
+		for k, v := range ExtractDirectivePrecisions(resolved.Primary.Directives) {
+			if v > precisions[k] {
+				precisions[k] = v
+			}
+		}
+	}
+	for _, journal := range resolved.Files {
+		for k, v := range ExtractDirectivePrecisions(journal.Directives) {
+			if v > precisions[k] {
+				precisions[k] = v
 			}
 		}
 	}

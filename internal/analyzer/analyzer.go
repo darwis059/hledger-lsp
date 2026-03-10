@@ -127,7 +127,7 @@ func (a *Analyzer) AnalyzeResolved(resolved *include.ResolvedJournal) *AnalysisR
 	declaredAccounts := collectDeclaredAccountsFromResolved(resolved)
 	declaredCommodities := collectDeclaredCommoditiesFromResolved(resolved)
 
-	directivePrecisions := ExtractDirectivePrecisions(resolved.Primary.Directives)
+	directivePrecisions := extractDirectivePrecisionsFromResolved(resolved)
 
 	for i := range resolved.Primary.Transactions {
 		tx := &resolved.Primary.Transactions[i]

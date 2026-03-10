@@ -952,9 +952,12 @@ func TestAnalyzer_CommodityDirective_NoPrecision_Balanced(t *testing.T) {
 }
 
 func TestAnalyzer_CommodityDirectivePrecision_CRLF(t *testing.T) {
-	input := strings.ReplaceAll("commodity $1,000.00\r\n\r\n2024-01-15 buy\r\n    assets:stock  3 AAPL @ $33.333\r\n    assets:cash  -$100\r\n", "\r\n", "\n")
+	input := "commodity $1,000.00\r\n\r\n2024-01-15 buy\r\n    assets:stock  3 AAPL @ $33.333\r\n    assets:cash  -$100\r\n"
+	normalized := strings.ReplaceAll(input, "\r\n", "\n")
+	require.Contains(t, input, "\r\n", "precondition: input has CRLF")
+	require.NotContains(t, normalized, "\r", "precondition: normalized has no CR")
 
-	journal, errs := parser.Parse(input)
+	journal, errs := parser.Parse(normalized)
 	require.Empty(t, errs)
 
 	a := New()
@@ -962,7 +965,41 @@ func TestAnalyzer_CommodityDirectivePrecision_CRLF(t *testing.T) {
 
 	for _, d := range result.Diagnostics {
 		if d.Code == "UNBALANCED" {
-			t.Errorf("unexpected UNBALANCED diagnostic (CRLF variant): %s", d.Message)
+			t.Errorf("unexpected UNBALANCED diagnostic (CRLF-normalized variant): %s", d.Message)
 		}
 	}
+}
+
+func TestAnalyzeResolved_DirectivePrecisionFromIncludedFile(t *testing.T) {
+	// commodity directive in included file should be used for balance checking
+	// 3 * 33.337 = 100.011; diff = 0.011
+	// Without directive: precision 0 → tolerance 0.5 → balanced
+	// With directive precision 2: tolerance 0.005, |0.011| > 0.005 → unbalanced
+	includedContent := `commodity $1,000.00`
+	primaryContent := `2024-01-15 buy
+    assets:stock  3 AAPL @ $33.337
+    assets:cash  -$100`
+
+	includedJournal, _ := parser.Parse(includedContent)
+	primaryJournal, _ := parser.Parse(primaryContent)
+
+	resolved := &include.ResolvedJournal{
+		Primary: primaryJournal,
+		Files: map[string]*ast.Journal{
+			"/path/to/commodities.journal": includedJournal,
+		},
+		FileOrder: []string{"/path/to/commodities.journal"},
+	}
+
+	a := New()
+	result := a.AnalyzeResolved(resolved)
+
+	var foundUnbalanced bool
+	for _, d := range result.Diagnostics {
+		if d.Code == "UNBALANCED" {
+			foundUnbalanced = true
+		}
+	}
+	assert.True(t, foundUnbalanced,
+		"commodity directive from included file must tighten tolerance: precision 2 → tolerance 0.005, diff 0.011 should be unbalanced")
 }
