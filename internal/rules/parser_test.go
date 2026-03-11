@@ -312,6 +312,51 @@ func TestParse_IfBlockInlineAndORPatterns(t *testing.T) {
 	}
 }
 
+func TestParse_IfBlockHashPattern(t *testing.T) {
+	// hledger treats # at line start in if-pattern section as a pattern, not a comment
+	input := "if\nA\n#B\nC\n account2 foo"
+	rf, diags := Parse(input)
+	if len(rf.IfBlocks) != 1 {
+		t.Fatalf("ifBlocks: got %d, want 1", len(rf.IfBlocks))
+	}
+	block := rf.IfBlocks[0]
+	if len(block.Patterns) != 3 {
+		t.Errorf("patterns: got %v, want [A #B C]", block.Patterns)
+	}
+	if len(block.Patterns) >= 2 && block.Patterns[1] != "#B" {
+		t.Errorf("pattern[1]: got %q, want #B", block.Patterns[1])
+	}
+	if len(block.Assignments) != 1 || block.Assignments[0].Field != "account2" {
+		t.Errorf("assignments: got %v, want [{account2 foo}]", block.Assignments)
+	}
+	for _, d := range diags {
+		if d.Code == "UNKNOWN_DIRECTIVE" {
+			t.Errorf("unexpected UNKNOWN_DIRECTIVE: %s", d.Message)
+		}
+	}
+}
+
+func TestParse_IfBlockSemicolonPattern(t *testing.T) {
+	// ; at line start in if-pattern section is a pattern, not a comment
+	input := "if\n;regex\n account2 bar"
+	rf, diags := Parse(input)
+	if len(rf.IfBlocks) != 1 {
+		t.Fatalf("ifBlocks: got %d, want 1", len(rf.IfBlocks))
+	}
+	block := rf.IfBlocks[0]
+	if len(block.Patterns) != 1 || block.Patterns[0] != ";regex" {
+		t.Errorf("patterns: got %v, want [;regex]", block.Patterns)
+	}
+	if len(block.Assignments) != 1 || block.Assignments[0].Field != "account2" {
+		t.Errorf("assignments: got %v, want [{account2 bar}]", block.Assignments)
+	}
+	for _, d := range diags {
+		if d.Code == "UNKNOWN_DIRECTIVE" {
+			t.Errorf("unexpected UNKNOWN_DIRECTIVE: %s", d.Message)
+		}
+	}
+}
+
 func TestParse_IfBlockORPatternStopsAfterAssignment(t *testing.T) {
 	input := "if\n  account1 expenses\nbare-text"
 	rf, diags := Parse(input)

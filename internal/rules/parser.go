@@ -195,7 +195,21 @@ loop:
 			}
 		case TokenNewline:
 			p.advance()
-		case TokenEndKeyword, TokenDirective, TokenIfKeyword, TokenComment:
+		case TokenComment:
+			if len(block.Assignments) == 0 {
+				tok := p.current
+				block.Patterns = append(block.Patterns, tok.Value)
+				lastPatternEnd = ast.Position{
+					Line: tok.End.Line, Column: tok.End.Column, Offset: tok.End.Offset,
+				}
+				p.advance()
+				if p.current.Type == TokenNewline {
+					p.advance()
+				}
+			} else {
+				break loop
+			}
+		case TokenEndKeyword, TokenDirective, TokenIfKeyword:
 			break loop
 		default:
 			break loop
