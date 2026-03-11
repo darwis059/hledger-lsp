@@ -3446,3 +3446,125 @@ func TestParser_PostingWithAllLotAnnotationsCRLF(t *testing.T) {
 	assert.Equal(t, "2024-01-15", p.LotPrice.Date)
 	assert.Equal(t, "lot1", p.LotPrice.Label)
 }
+
+func TestParser_BalanceAssertionWithUnitCost(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL = 10 AAPL @ $150
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.BalanceAssertion)
+	assert.Equal(t, "AAPL", p.BalanceAssertion.Amount.Commodity.Symbol)
+	require.NotNil(t, p.BalanceAssertion.Cost)
+	assert.False(t, p.BalanceAssertion.Cost.IsTotal)
+	assert.True(t, p.BalanceAssertion.Cost.Amount.Quantity.Equal(decimal.NewFromInt(150)))
+	assert.Equal(t, "$", p.BalanceAssertion.Cost.Amount.Commodity.Symbol)
+}
+
+func TestParser_BalanceAssertionWithTotalCost(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL = 10 AAPL @@ $1500
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.BalanceAssertion)
+	require.NotNil(t, p.BalanceAssertion.Cost)
+	assert.True(t, p.BalanceAssertion.Cost.IsTotal)
+	assert.True(t, p.BalanceAssertion.Cost.Amount.Quantity.Equal(decimal.NewFromInt(1500)))
+}
+
+func TestParser_BalanceAssertionWithLotPrice(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL = 10 AAPL {$150}
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.BalanceAssertion)
+	require.NotNil(t, p.BalanceAssertion.LotPrice)
+	require.NotNil(t, p.BalanceAssertion.LotPrice.Cost)
+	assert.False(t, p.BalanceAssertion.LotPrice.IsTotal)
+	assert.True(t, p.BalanceAssertion.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(150)))
+	assert.Equal(t, "$", p.BalanceAssertion.LotPrice.Cost.Commodity.Symbol)
+}
+
+func TestParser_BalanceAssertionWithTotalLotPrice(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL = 10 AAPL {{$1500}}
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.BalanceAssertion)
+	require.NotNil(t, p.BalanceAssertion.LotPrice)
+	assert.True(t, p.BalanceAssertion.LotPrice.IsTotal)
+}
+
+func TestParser_BalanceAssertionWithLotDate(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL = 10 AAPL [2024-01-15]
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.BalanceAssertion)
+	require.NotNil(t, p.BalanceAssertion.LotPrice)
+	assert.Equal(t, "2024-01-15", p.BalanceAssertion.LotPrice.Date)
+}
+
+func TestParser_BalanceAssertionWithAllAnnotations(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL = 10 AAPL {$150} [2024-01-15] @ $180
+    assets:cash`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.BalanceAssertion)
+	assert.Equal(t, "AAPL", p.BalanceAssertion.Amount.Commodity.Symbol)
+
+	require.NotNil(t, p.BalanceAssertion.LotPrice)
+	require.NotNil(t, p.BalanceAssertion.LotPrice.Cost)
+	assert.True(t, p.BalanceAssertion.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(150)))
+	assert.Equal(t, "2024-01-15", p.BalanceAssertion.LotPrice.Date)
+
+	require.NotNil(t, p.BalanceAssertion.Cost)
+	assert.False(t, p.BalanceAssertion.Cost.IsTotal)
+	assert.True(t, p.BalanceAssertion.Cost.Amount.Quantity.Equal(decimal.NewFromInt(180)))
+}
+
+func TestParser_BalanceAssignmentWithCost(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  = 10 AAPL @ $150
+    assets:cash  $-1500`
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	assert.Nil(t, p.Amount)
+	require.NotNil(t, p.BalanceAssertion)
+	assert.Equal(t, "AAPL", p.BalanceAssertion.Amount.Commodity.Symbol)
+	require.NotNil(t, p.BalanceAssertion.Cost)
+	assert.True(t, p.BalanceAssertion.Cost.Amount.Quantity.Equal(decimal.NewFromInt(150)))
+}

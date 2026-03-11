@@ -146,6 +146,8 @@ type LotPrice struct {
 
 type BalanceAssertion struct {
 	Amount      Amount
+	Cost        *Cost
+	LotPrice    *LotPrice
 	IsStrict    bool
 	IsInclusive bool
 	Range       Range

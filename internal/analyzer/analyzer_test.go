@@ -1025,3 +1025,47 @@ func TestAnalyzeResolved_DirectivePrecisionFromIncludedFile(t *testing.T) {
 	assert.True(t, foundUnbalanced,
 		"commodity directive from included file must tighten tolerance: precision 2 → tolerance 0.005, diff 0.011 should be unbalanced")
 }
+
+func TestAnalyzer_UndeclaredCommodity_BalanceAssertionCost(t *testing.T) {
+	input := `commodity AAPL
+
+2024-01-15 test
+    assets:stocks  10 AAPL = 10 AAPL @ $150
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	a := New()
+	result := a.Analyze(journal)
+
+	var foundUndeclared bool
+	for _, d := range result.Diagnostics {
+		if d.Code == "UNDECLARED_COMMODITY" && d.Message == "commodity '$' has no directive" {
+			foundUndeclared = true
+		}
+	}
+	assert.True(t, foundUndeclared, "expected UNDECLARED_COMMODITY for $ in balance assertion cost")
+}
+
+func TestAnalyzer_UndeclaredCommodity_BalanceAssertionLotPrice(t *testing.T) {
+	input := `commodity AAPL
+
+2024-01-15 test
+    assets:stocks  10 AAPL = 10 AAPL {$150}
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	a := New()
+	result := a.Analyze(journal)
+
+	var foundUndeclared bool
+	for _, d := range result.Diagnostics {
+		if d.Code == "UNDECLARED_COMMODITY" && d.Message == "commodity '$' has no directive" {
+			foundUndeclared = true
+		}
+	}
+	assert.True(t, foundUndeclared, "expected UNDECLARED_COMMODITY for $ in balance assertion lot price")
+}

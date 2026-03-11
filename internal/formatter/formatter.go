@@ -429,6 +429,17 @@ func formatPostingWithOpts(posting *ast.Posting, alignment AlignmentInfo, commod
 			sb.WriteString("= ")
 		}
 		writeAmountWithSign(&sb, &posting.BalanceAssertion.Amount, commodityFormats)
+		if posting.BalanceAssertion.LotPrice != nil {
+			writeLotPrice(&sb, posting.BalanceAssertion.LotPrice, commodityFormats)
+		}
+		if posting.BalanceAssertion.Cost != nil {
+			if posting.BalanceAssertion.Cost.IsTotal {
+				sb.WriteString(" @@ ")
+			} else {
+				sb.WriteString(" @ ")
+			}
+			writeAmountWithSign(&sb, &posting.BalanceAssertion.Cost.Amount, commodityFormats)
+		}
 	}
 
 	if posting.Comment != "" {

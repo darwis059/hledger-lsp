@@ -733,8 +733,36 @@ func (p *Parser) parseBalanceAssertion() *ast.BalanceAssertion {
 		return nil
 	}
 	ba.Amount = *amount
+	p.parseBalanceAssertionAnnotations(ba)
 	ba.Range.End = toASTPosition(p.current.Pos)
 	return ba
+}
+
+func (p *Parser) parseBalanceAssertionAnnotations(ba *ast.BalanceAssertion) {
+	ensureLot := func() *ast.LotPrice {
+		if ba.LotPrice == nil {
+			ba.LotPrice = &ast.LotPrice{}
+			ba.LotPrice.Range.Start = toASTPosition(p.current.Pos)
+		}
+		return ba.LotPrice
+	}
+	for {
+		switch p.current.Type {
+		case TokenLBrace, TokenDoubleLBrace:
+			p.parseLotPriceInto(ensureLot())
+		case TokenLBracket:
+			p.parseLotDate(ensureLot())
+		case TokenCode:
+			lot := ensureLot()
+			lot.Label = p.current.Value
+			lot.Range.End = toASTPosition(p.current.End)
+			p.advance()
+		case TokenAt, TokenAtAt:
+			ba.Cost = p.parseCost()
+		default:
+			return
+		}
+	}
 }
 
 func (p *Parser) parseDirective() ast.Directive {

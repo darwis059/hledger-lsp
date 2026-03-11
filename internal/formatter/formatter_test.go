@@ -2098,3 +2098,63 @@ func TestFormatDocument_WithConsolidatedLotAllFields(t *testing.T) {
 	result2 := applyEdits(result, edits2)
 	assert.Equal(t, result, result2, "consolidated lot (all fields) formatting must be idempotent")
 }
+
+func TestFormatDocument_BalanceAssertionWithCost(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL = 10 AAPL @ $150
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "= 10 AAPL @ $150")
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+	assert.Equal(t, result, result2, "BA with cost formatting must be idempotent")
+}
+
+func TestFormatDocument_BalanceAssertionWithLotPrice(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL = 10 AAPL {$150}
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "= 10 AAPL {$150}")
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+	assert.Equal(t, result, result2, "BA with lot price formatting must be idempotent")
+}
+
+func TestFormatDocument_BalanceAssertionWithAllAnnotations(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL = 10 AAPL {$150} [2024-01-15] @ $180
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "= 10 AAPL {$150} [2024-01-15] @ $180")
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+	assert.Equal(t, result, result2, "BA with all annotations formatting must be idempotent")
+}
