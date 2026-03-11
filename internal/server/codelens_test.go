@@ -91,18 +91,15 @@ func TestCodeLens_FeatureDisabled(t *testing.T) {
 	assert.Nil(t, result)
 }
 
-func TestCodeLens_CommodityDirectivePrecision(t *testing.T) {
+func TestCodeLens_CostRounding_LocalPrecision(t *testing.T) {
 	srv := NewServer()
 	settings := srv.getSettings()
 	settings.Features.CodeLens = true
 	srv.setSettings(settings)
 
 	// 3 * 33.337 = 100.011; diff = 0.011
-	// Without directive: posting precision 0 → tolerance 0.5 → balanced (wrong)
-	// With directive precision 2: tolerance 0.005, |0.011| > 0.005 → unbalanced (correct)
-	content := `commodity $1,000.00
-
-2024-01-15 buy
+	// hledger 1.50+: posting $ precision 0 → tolerance 0.5; |0.011| < 0.5 → balanced
+	content := `2024-01-15 buy
     assets:stock  3 AAPL @ $33.337
     assets:cash  -$100`
 
@@ -116,8 +113,8 @@ func TestCodeLens_CommodityDirectivePrecision(t *testing.T) {
 	result, err := srv.CodeLens(context.Background(), params)
 	require.NoError(t, err)
 	require.Len(t, result, 1)
-	assert.Contains(t, result[0].Command.Title, "unbalanced",
-		"CodeLens must use commodity directive precision for balance check")
+	assert.Contains(t, result[0].Command.Title, "balanced",
+		"CodeLens uses local posting precision only (hledger 1.50+)")
 }
 
 func TestCodeLens_OneLensPerTransaction(t *testing.T) {

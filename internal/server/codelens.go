@@ -29,12 +29,11 @@ func (s *Server) CodeLens(_ context.Context, params *protocol.CodeLensParams) ([
 		return nil, nil
 	}
 
-	directivePrecisions := analyzer.ExtractDirectivePrecisions(journal.Directives)
 	lenses := make([]protocol.CodeLens, 0, len(journal.Transactions))
 
 	for i := range journal.Transactions {
 		tx := &journal.Transactions[i]
-		result := analyzer.CheckBalance(tx, decimal.NewFromFloat(settings.Diagnostics.BalanceTolerance), directivePrecisions)
+		result := analyzer.CheckBalance(tx, decimal.NewFromFloat(settings.Diagnostics.BalanceTolerance))
 
 		title := buildCodeLensTitle(result, len(tx.Postings))
 		lenses = append(lenses, protocol.CodeLens{

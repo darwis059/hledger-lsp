@@ -106,7 +106,7 @@ func BenchmarkCheckBalance(b *testing.B) {
 	}
 
 	for b.Loop() {
-		CheckBalance(tx, decimal.Zero, nil)
+		CheckBalance(tx, decimal.Zero)
 	}
 }
 
@@ -126,7 +126,7 @@ func BenchmarkCheckBalance_MultiCommodity(b *testing.B) {
 	}
 
 	for b.Loop() {
-		CheckBalance(tx, decimal.Zero, nil)
+		CheckBalance(tx, decimal.Zero)
 	}
 }
 
