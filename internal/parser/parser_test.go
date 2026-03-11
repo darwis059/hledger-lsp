@@ -513,6 +513,41 @@ end comment
 	assert.Equal(t, "Real transaction", tx.Description)
 }
 
+func TestParser_CommentBlockNoEnd(t *testing.T) {
+	input := `comment
+This is a comment block without end comment
+2024-01-01 Fake transaction
+    expenses:food  $50
+    assets:cash
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Empty(t, journal.Transactions)
+	require.Empty(t, journal.Directives)
+}
+
+func TestParser_CommentBlockNoEnd_WithTrailingContent(t *testing.T) {
+	input := `2024-01-15 Real transaction
+    expenses:food  $30
+    assets:checking
+
+comment
+Everything below is ignored
+2024-02-01 Fake transaction
+    expenses:food  $50
+    assets:cash
+`
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	tx := journal.Transactions[0]
+	assert.Equal(t, 2024, tx.Date.Year)
+	assert.Equal(t, 1, tx.Date.Month)
+	assert.Equal(t, 15, tx.Date.Day)
+	assert.Equal(t, "Real transaction", tx.Description)
+}
+
 func TestParser_DecimalMarkDirective(t *testing.T) {
 	tests := []struct {
 		name     string

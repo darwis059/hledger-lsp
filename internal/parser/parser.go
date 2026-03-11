@@ -1289,8 +1289,6 @@ func (p *Parser) parseCommentBlock(_ Position) ast.Directive {
 		p.advance()
 	}
 
-	// Reached EOF without finding "end comment"
-	p.error("unclosed comment block")
 	return nil
 }
 
