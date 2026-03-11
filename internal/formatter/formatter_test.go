@@ -2158,3 +2158,23 @@ func TestFormatDocument_BalanceAssertionWithAllAnnotations(t *testing.T) {
 	result2 := applyEdits(result, edits2)
 	assert.Equal(t, result, result2, "BA with all annotations formatting must be idempotent")
 }
+
+func TestFormatDocument_StrictBalanceAssertionWithCost(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL == 10 AAPL @ $150
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+
+	edits := FormatDocument(journal, input)
+	result := applyEdits(input, edits)
+
+	assert.Contains(t, result, "== 10 AAPL @ $150")
+
+	journal2, errs := parser.Parse(result)
+	require.Empty(t, errs)
+	edits2 := FormatDocument(journal2, result)
+	result2 := applyEdits(result, edits2)
+	assert.Equal(t, result, result2, "strict BA with cost formatting must be idempotent")
+}

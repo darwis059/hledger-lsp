@@ -3603,3 +3603,61 @@ func TestParser_BalanceAssignmentWithCost(t *testing.T) {
 	require.NotNil(t, p.BalanceAssertion.Cost)
 	assert.True(t, p.BalanceAssertion.Cost.Amount.Quantity.Equal(decimal.NewFromInt(150)))
 }
+
+func TestParser_BalanceAssertionWithAllAnnotationsCRLF(t *testing.T) {
+	input := strings.ReplaceAll("2024-01-15 buy stocks\r\n    assets:stocks  10 AAPL = 10 AAPL {$150} [2024-01-15] @ $180\r\n    assets:cash\r\n", "\r\n", "\n")
+
+	journal, errs := Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	p := journal.Transactions[0].Postings[0]
+	require.NotNil(t, p.BalanceAssertion)
+	assert.Equal(t, "AAPL", p.BalanceAssertion.Amount.Commodity.Symbol)
+
+	require.NotNil(t, p.BalanceAssertion.LotPrice)
+	require.NotNil(t, p.BalanceAssertion.LotPrice.Cost)
+	assert.True(t, p.BalanceAssertion.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(150)))
+	assert.Equal(t, "2024-01-15", p.BalanceAssertion.LotPrice.Date)
+
+	require.NotNil(t, p.BalanceAssertion.Cost)
+	assert.False(t, p.BalanceAssertion.Cost.IsTotal)
+	assert.True(t, p.BalanceAssertion.Cost.Amount.Quantity.Equal(decimal.NewFromInt(180)))
+}
+
+func TestParser_BalanceAssertionMalformedCost(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL = 10 AAPL @
+    assets:cash
+
+2024-02-01 groceries
+    expenses:food  $50
+    assets:cash
+`
+	journal, errs := Parse(input)
+	require.NotEmpty(t, errs)
+	require.Len(t, journal.Transactions, 2)
+	assert.Equal(t, "groceries", journal.Transactions[1].Description)
+}
+
+func TestParser_BalanceAssertionUnclosedLotPrice(t *testing.T) {
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL = 10 AAPL {$150
+    assets:cash
+
+2024-02-01 groceries
+    expenses:food  $50
+    assets:cash
+`
+	journal, errs := Parse(input)
+	// parseLotPriceInto silently recovers from unclosed brace
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 2)
+	assert.Equal(t, "groceries", journal.Transactions[1].Description)
+
+	ba := journal.Transactions[0].Postings[0].BalanceAssertion
+	require.NotNil(t, ba)
+	require.NotNil(t, ba.LotPrice)
+	require.NotNil(t, ba.LotPrice.Cost)
+	assert.True(t, ba.LotPrice.Cost.Quantity.Equal(decimal.NewFromInt(150)))
+}
