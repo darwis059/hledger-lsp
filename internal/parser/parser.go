@@ -603,23 +603,10 @@ func (p *Parser) ensureLotPrice(posting *ast.Posting) *ast.LotPrice {
 }
 
 func (p *Parser) parseLotAnnotations(posting *ast.Posting) {
-	for {
-		switch p.current.Type {
-		case TokenLBrace, TokenDoubleLBrace:
-			p.parseLotPriceInto(p.ensureLotPrice(posting))
-		case TokenLBracket:
-			p.parseLotDate(p.ensureLotPrice(posting))
-		case TokenCode:
-			lot := p.ensureLotPrice(posting)
-			lot.Label = p.current.Value
-			lot.Range.End = toASTPosition(p.current.End)
-			p.advance()
-		case TokenAt, TokenAtAt:
-			posting.Cost = p.parseCost()
-		default:
-			return
-		}
-	}
+	p.parseAnnotationLoop(
+		func() *ast.LotPrice { return p.ensureLotPrice(posting) },
+		func(c *ast.Cost) { posting.Cost = c },
+	)
 }
 
 func (p *Parser) parseLotDate(lot *ast.LotPrice) {
@@ -739,13 +726,19 @@ func (p *Parser) parseBalanceAssertion() *ast.BalanceAssertion {
 }
 
 func (p *Parser) parseBalanceAssertionAnnotations(ba *ast.BalanceAssertion) {
-	ensureLot := func() *ast.LotPrice {
-		if ba.LotPrice == nil {
-			ba.LotPrice = &ast.LotPrice{}
-			ba.LotPrice.Range.Start = toASTPosition(p.current.Pos)
-		}
-		return ba.LotPrice
-	}
+	p.parseAnnotationLoop(
+		func() *ast.LotPrice {
+			if ba.LotPrice == nil {
+				ba.LotPrice = &ast.LotPrice{}
+				ba.LotPrice.Range.Start = toASTPosition(p.current.Pos)
+			}
+			return ba.LotPrice
+		},
+		func(c *ast.Cost) { ba.Cost = c },
+	)
+}
+
+func (p *Parser) parseAnnotationLoop(ensureLot func() *ast.LotPrice, setCost func(*ast.Cost)) {
 	for {
 		switch p.current.Type {
 		case TokenLBrace, TokenDoubleLBrace:
@@ -758,7 +751,7 @@ func (p *Parser) parseBalanceAssertionAnnotations(ba *ast.BalanceAssertion) {
 			lot.Range.End = toASTPosition(p.current.End)
 			p.advance()
 		case TokenAt, TokenAtAt:
-			ba.Cost = p.parseCost()
+			setCost(p.parseCost())
 		default:
 			return
 		}
