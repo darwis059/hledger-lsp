@@ -573,8 +573,10 @@ func TestCheckBalance_MultiCommodity_OneExceedsTolerance(t *testing.T) {
 	assert.Contains(t, result.Differences, "CHF")
 }
 
-func TestCheckBalance_LotCost_UnitPrice(t *testing.T) {
-	// 10 AAPL {$150} = 10 * $150 = $1500; cash -$1500 → balanced
+func TestCheckBalance_LotCost_Ignored(t *testing.T) {
+	// hledger 1: lot cost {} is ignored for balance checking.
+	// 10 AAPL {$150} balances as 10 AAPL (not $1500).
+	// Two explicit postings: 10 AAPL + $-1500 → two different commodities, no inferred → unbalanced.
 	input := `2024-01-15 buy stocks
     assets:stocks  10 AAPL {$150}
     assets:cash  $-1500`
@@ -584,21 +586,40 @@ func TestCheckBalance_LotCost_UnitPrice(t *testing.T) {
 	require.Len(t, journal.Transactions, 1)
 
 	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
-	assert.True(t, result.Balanced, "lot unit cost {$150} should work like @ $150 for balance")
+	assert.False(t, result.Balanced,
+		"lot cost {$150} must be ignored: AAPL and $ are separate commodities, both unbalanced")
+	assert.Contains(t, result.Differences, "AAPL")
+	assert.Contains(t, result.Differences, "$")
 }
 
-func TestCheckBalance_LotCost_TotalPrice(t *testing.T) {
-	// 10 AAPL {{$1500}} = total $1500; cash -$1500 → balanced
+func TestCheckBalance_LotCost_UnitPrice(t *testing.T) {
+	// hledger 1: {$150} ignored for balance. 10 AAPL + inferred → balanced
 	input := `2024-01-15 buy stocks
-    assets:stocks  10 AAPL {{$1500}}
-    assets:cash  $-1500`
+    assets:stocks  10 AAPL {$150}
+    assets:cash`
 
 	journal, errs := parser.Parse(input)
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
 	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
-	assert.True(t, result.Balanced, "lot total cost {{$1500}} should work like @@ $1500 for balance")
+	assert.True(t, result.Balanced, "lot cost ignored: 10 AAPL + inferred → balanced")
+	assert.Equal(t, 1, result.InferredIdx)
+}
+
+func TestCheckBalance_LotCost_TotalPrice(t *testing.T) {
+	// hledger 1: {{$1500}} ignored for balance. 10 AAPL + inferred → balanced
+	input := `2024-01-15 buy stocks
+    assets:stocks  10 AAPL {{$1500}}
+    assets:cash`
+
+	journal, errs := parser.Parse(input)
+	require.Empty(t, errs)
+	require.Len(t, journal.Transactions, 1)
+
+	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
+	assert.True(t, result.Balanced, "lot total cost ignored: 10 AAPL + inferred → balanced")
+	assert.Equal(t, 1, result.InferredIdx)
 }
 
 func TestCheckBalance_LotCost_WithCost_CostWins(t *testing.T) {
@@ -617,33 +638,32 @@ func TestCheckBalance_LotCost_WithCost_CostWins(t *testing.T) {
 }
 
 func TestCheckBalance_LotCost_Unbalanced(t *testing.T) {
-	// 10 AAPL {$150} = $1500; cash -$1400 → off by $100
+	// hledger 1: {$150} ignored. 10 AAPL + -5 AAPL → AAPL off by 5
 	input := `2024-01-15 buy stocks
     assets:stocks  10 AAPL {$150}
-    assets:cash  $-1400`
+    assets:stocks2  -5 AAPL`
 
 	journal, errs := parser.Parse(input)
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
 	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
-	assert.False(t, result.Balanced, "lot cost with wrong amount should be unbalanced")
-	assert.Equal(t, decimal.NewFromInt(100), result.Differences["$"])
+	assert.False(t, result.Balanced, "lot cost ignored: AAPL off by 5")
+	assert.Equal(t, decimal.NewFromInt(5), result.Differences["AAPL"])
 }
 
 func TestCheckBalance_LotCost_PrecisionMapping(t *testing.T) {
-	// 3.000 AAPL {$33.337} = 3.000 * 33.337 = 100.011; diff = 0.011
-	// Without fix: prec 3 mapped to AAPL (wrong); $ gets prec 0 → tolerance 0.5 → balanced
-	// With fix: prec 3 mapped to $ (correct); $ gets max(3,0) = 3 → tolerance 0.0005 → unbalanced
+	// hledger 1: {$33.337} ignored. 3.000 AAPL + -3.000 AAPL → balanced (diff 0)
+	// Precision stays on AAPL (native), not mapped to $
 	input := `2024-01-15 buy
     assets:stocks  3.000 AAPL {$33.337}
-    assets:cash  -$100`
+    assets:stocks2  -3.000 AAPL`
 
 	journal, errs := parser.Parse(input)
 	require.Empty(t, errs)
 	require.Len(t, journal.Transactions, 1)
 
 	result := CheckBalance(&journal.Transactions[0], decimal.Zero)
-	assert.False(t, result.Balanced,
-		"lot cost precision mapping: posting prec 3 mapped to $ → tolerance 0.0005, diff 0.011 exceeds tolerance")
+	assert.True(t, result.Balanced,
+		"lot cost ignored: AAPL precision stays on native commodity, diff 0 → balanced")
 }

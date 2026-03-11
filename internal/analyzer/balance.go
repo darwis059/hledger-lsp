@@ -83,8 +83,6 @@ func maxPrecisionByCommodity(postings []ast.Posting) map[string]int32 {
 		commodity := p.Amount.Commodity.Symbol
 		if p.Cost != nil {
 			commodity = p.Cost.Amount.Commodity.Symbol
-		} else if p.LotPrice != nil && p.LotPrice.Cost != nil {
-			commodity = p.LotPrice.Cost.Commodity.Symbol
 		}
 		prec := decimalPrecision(p.Amount.Quantity)
 		if prec > precisions[commodity] {
@@ -113,18 +111,6 @@ func sumByCommodity(postings []ast.Posting) map[string]decimal.Decimal {
 				quantity = p.Cost.Amount.Quantity
 			} else {
 				quantity = p.Cost.Amount.Quantity.Mul(p.Amount.Quantity.Abs())
-			}
-			if p.Amount.Quantity.IsNegative() {
-				quantity = quantity.Neg()
-			}
-			balances[commodity] = balances[commodity].Add(quantity)
-		} else if p.LotPrice != nil && p.LotPrice.Cost != nil {
-			commodity := p.LotPrice.Cost.Commodity.Symbol
-			var quantity decimal.Decimal
-			if p.LotPrice.IsTotal {
-				quantity = p.LotPrice.Cost.Quantity
-			} else {
-				quantity = p.LotPrice.Cost.Quantity.Mul(p.Amount.Quantity.Abs())
 			}
 			if p.Amount.Quantity.IsNegative() {
 				quantity = quantity.Neg()
