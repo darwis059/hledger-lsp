@@ -104,12 +104,18 @@ func (s *Server) onTypeNewline(doc string, params *protocol.DocumentOnTypeFormat
 		newIndent = ""
 	}
 
-	var currentLineLen uint32
+	var currentLineContent string
 	if line < len(lines) {
-		currentLineContent := lines[line]
-		if strings.TrimSpace(currentLineContent) == "" {
-			currentLineLen = uint32(lsputil.UTF16Len(currentLineContent))
-		}
+		currentLineContent = lines[line]
+	}
+
+	if currentLineContent == newIndent {
+		return nil, nil
+	}
+
+	var currentLineLen uint32
+	if strings.TrimSpace(currentLineContent) == "" {
+		currentLineLen = uint32(lsputil.UTF16Len(currentLineContent))
 	}
 
 	return []protocol.TextEdit{{

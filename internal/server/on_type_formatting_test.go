@@ -56,8 +56,7 @@ func TestOnTypeFormatting_AfterEmptyLine(t *testing.T) {
 
 	edits, err := ts.onTypeFormatting(uri, 4, "\n")
 	require.NoError(t, err)
-	require.Len(t, edits, 1)
-	assert.Equal(t, "", edits[0].NewText)
+	assert.Nil(t, edits)
 }
 
 func TestOnTypeFormatting_AfterWhitespaceOnlyLine(t *testing.T) {
@@ -69,8 +68,7 @@ func TestOnTypeFormatting_AfterWhitespaceOnlyLine(t *testing.T) {
 
 	edits, err := ts.onTypeFormatting(uri, 4, "\n")
 	require.NoError(t, err)
-	require.Len(t, edits, 1)
-	assert.Equal(t, "", edits[0].NewText)
+	assert.Nil(t, edits)
 }
 
 func TestOnTypeFormatting_FirstLine(t *testing.T) {
@@ -94,8 +92,7 @@ func TestOnTypeFormatting_AfterDirective(t *testing.T) {
 
 	edits, err := ts.onTypeFormatting(uri, 1, "\n")
 	require.NoError(t, err)
-	require.Len(t, edits, 1)
-	assert.Equal(t, "", edits[0].NewText)
+	assert.Nil(t, edits)
 }
 
 func TestOnTypeFormatting_CustomIndentSize(t *testing.T) {
@@ -164,6 +161,30 @@ func TestOnTypeFormatting_ReplacesEditorAutoIndent(t *testing.T) {
 	assert.Equal(t, uint32(8), edits[0].Range.End.Character)
 }
 
+func TestOnTypeFormatting_SkipsNoopEdit(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "2024-01-15 grocery store\n    "
+
+	ts.StoreDocument(uri, content)
+
+	edits, err := ts.onTypeFormatting(uri, 1, "\n")
+	require.NoError(t, err)
+	assert.Nil(t, edits)
+}
+
+func TestOnTypeFormatting_SkipsNoopEdit_EmptyIndent(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///test.journal")
+	content := "; this is a comment\n"
+
+	ts.StoreDocument(uri, content)
+
+	edits, err := ts.onTypeFormatting(uri, 1, "\n")
+	require.NoError(t, err)
+	assert.Nil(t, edits)
+}
+
 func TestOnTypeFormatting_AfterComment(t *testing.T) {
 	ts := newTestServer()
 	uri := protocol.DocumentURI("file:///test.journal")
@@ -173,8 +194,7 @@ func TestOnTypeFormatting_AfterComment(t *testing.T) {
 
 	edits, err := ts.onTypeFormatting(uri, 1, "\n")
 	require.NoError(t, err)
-	require.Len(t, edits, 1)
-	assert.Equal(t, "", edits[0].NewText)
+	assert.Nil(t, edits)
 }
 
 func TestOnTypeFormatting_AfterPeriodicTransaction(t *testing.T) {
@@ -212,8 +232,7 @@ func TestOnTypeFormatting_AfterIncludeDirective(t *testing.T) {
 
 	edits, err := ts.onTypeFormatting(uri, 1, "\n")
 	require.NoError(t, err)
-	require.Len(t, edits, 1)
-	assert.Equal(t, "", edits[0].NewText)
+	assert.Nil(t, edits)
 }
 
 func TestOnTypeFormatting_AfterCommodityDirective(t *testing.T) {
@@ -225,8 +244,7 @@ func TestOnTypeFormatting_AfterCommodityDirective(t *testing.T) {
 
 	edits, err := ts.onTypeFormatting(uri, 1, "\n")
 	require.NoError(t, err)
-	require.Len(t, edits, 1)
-	assert.Equal(t, "", edits[0].NewText)
+	assert.Nil(t, edits)
 }
 
 func (ts *testServer) onTypeFormattingTab(uri protocol.DocumentURI, line, character uint32) ([]protocol.TextEdit, error) {

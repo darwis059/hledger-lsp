@@ -179,6 +179,19 @@ If no semantic token type appears, the LSP server may not be running or semantic
 
 ## Troubleshooting
 
+**Double indentation on Enter:**
+
+- Upgrade hledger-vscode extension to the latest version (fixes `onEnterRules`)
+- If upgrading is not possible, add to your `settings.json`:
+
+```json
+{
+    "[hledger]": {
+        "editor.autoIndent": "keep"
+    }
+}
+```
+
 **LSP not starting:**
 
 - Check that `hledger-lsp` is in your PATH: `which hledger-lsp`
