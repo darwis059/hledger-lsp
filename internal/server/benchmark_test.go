@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"go.lsp.dev/protocol"
+	"go.lsp.dev/uri"
 
 	"github.com/juev/hledger-lsp/internal/include"
 	"github.com/juev/hledger-lsp/internal/workspace"
@@ -251,7 +252,7 @@ func setupBenchServer(b *testing.B, content string, withClient bool) (*Server, p
 		b.Fatal(err)
 	}
 
-	docURI := protocol.DocumentURI("file://" + mainPath)
+	docURI := uri.File(mainPath)
 	srv.documents.Store(docURI, content)
 
 	return srv, docURI

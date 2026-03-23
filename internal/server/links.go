@@ -42,7 +42,7 @@ func (s *Server) DocumentLink(ctx context.Context, params *protocol.DocumentLink
 		}
 		includePath = filepath.Clean(includePath)
 
-		target := protocol.DocumentURI("file://" + includePath)
+		target := pathToURI(includePath)
 
 		links = append(links, protocol.DocumentLink{
 			Range:  *astRangeToProtocol(inc.Range),

@@ -19,11 +19,11 @@ include data/transactions.journal
     expenses:food  $50
     assets:cash`
 
-	uri := protocol.DocumentURI("file:///home/user/main.journal")
-	srv.documents.Store(uri, content)
+	docURI := protocol.DocumentURI("file:///home/user/main.journal")
+	srv.documents.Store(docURI, content)
 
 	params := &protocol.DocumentLinkParams{
-		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+		TextDocument: protocol.TextDocumentIdentifier{URI: docURI},
 	}
 
 	result, err := srv.DocumentLink(context.Background(), params)
@@ -31,10 +31,10 @@ include data/transactions.journal
 	require.Len(t, result, 2)
 
 	assert.Equal(t, uint32(0), result[0].Range.Start.Line)
-	assert.Contains(t, string(result[0].Target), "accounts.journal")
+	assert.Equal(t, string(uri.File("/home/user/accounts.journal")), string(result[0].Target))
 
 	assert.Equal(t, uint32(1), result[1].Range.Start.Line)
-	assert.Contains(t, string(result[1].Target), "data/transactions.journal")
+	assert.Equal(t, string(uri.File("/home/user/data/transactions.journal")), string(result[1].Target))
 }
 
 func TestDocumentLink_NoIncludes(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.lsp.dev/protocol"
+	"go.lsp.dev/uri"
 
 	"github.com/juev/hledger-lsp/internal/analyzer"
 )
@@ -835,7 +836,7 @@ include transactions.journal`
 	srv.SetClient(client)
 
 	initParams := &protocol.InitializeParams{
-		RootURI: protocol.DocumentURI("file://" + tmpDir),
+		RootURI: uri.File(tmpDir),
 	}
 	_, err = srv.Initialize(context.Background(), initParams)
 	require.NoError(t, err)
@@ -843,7 +844,7 @@ include transactions.journal`
 	err = srv.workspace.Initialize()
 	require.NoError(t, err)
 
-	uri := protocol.DocumentURI("file://" + txPath)
+	uri := uri.File(txPath)
 	params := &protocol.DidOpenTextDocumentParams{
 		TextDocument: protocol.TextDocumentItem{
 			URI:  uri,
@@ -902,7 +903,7 @@ include transactions.journal`
 	srv := NewServer()
 
 	initParams := &protocol.InitializeParams{
-		RootURI: protocol.DocumentURI("file://" + tmpDir),
+		RootURI: uri.File(tmpDir),
 	}
 	_, err = srv.Initialize(context.Background(), initParams)
 	require.NoError(t, err)
@@ -910,7 +911,7 @@ include transactions.journal`
 	err = srv.workspace.Initialize()
 	require.NoError(t, err)
 
-	uri := protocol.DocumentURI("file://" + txPath)
+	uri := uri.File(txPath)
 	srv.documents.Store(uri, txContent)
 
 	formatParams := &protocol.DocumentFormattingParams{
@@ -1041,7 +1042,7 @@ include 2025.journal`
 	srv.SetClient(client)
 
 	_, err = srv.Initialize(context.Background(), &protocol.InitializeParams{
-		RootURI: protocol.DocumentURI("file://" + tmpDir),
+		RootURI: uri.File(tmpDir),
 	})
 	require.NoError(t, err)
 
@@ -1050,7 +1051,7 @@ include 2025.journal`
 
 	time.Sleep(200 * time.Millisecond)
 
-	txURI := protocol.DocumentURI("file://" + txPath)
+	txURI := uri.File(txPath)
 	err = srv.DidOpen(context.Background(), &protocol.DidOpenTextDocumentParams{
 		TextDocument: protocol.TextDocumentItem{
 			URI:  txURI,
