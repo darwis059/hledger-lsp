@@ -1,9 +1,11 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -351,4 +353,235 @@ func TestIntegration_ReferencesDeclarationInIncludedFile(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resultExclude, 1) // only usage
 	assert.Contains(t, string(resultExclude[0].URI), "main.journal")
+}
+
+func TestIntegration_Issue18_HoverWithIncludedFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Reproduce exact setup from issue #18
+	recordsContent := `2026-01-01 Cafe
+    Assets:Cash  -25.70 USD
+    Assets:Cash  -9.00 USD
+    Expenses:Occasions  25.70 USD
+    Expenses:Occasions  9.00 USD
+
+2026-01-01 Payee1
+    Assets:Cash  -6.20 USD
+    Expenses:Occasions  6.20 USD
+
+2026-03-17 Payee2
+    Assets:Cash  -5.00 USD
+    Expenses:Food  5.00 USD
+
+2026-03-17 Payee2
+    Assets:Cash  -17.70 USD
+    Expenses:Food  17.70 USD
+
+2026-03-18 Payee2
+    Assets:Cash  -7.80 USD
+    Expenses:Food  7.80 USD
+`
+
+	mainContent := `include records.journal
+
+account Assets:Cash
+account Expenses:Food
+account Expenses:Occasions
+
+2026-01-01 Test
+    Assets:Cash  -25.70 USD
+    Assets:Cash  -18.00 USD
+    Expenses:Occasions  25.70 USD
+    Expenses:Occasions  9.00 USD
+    Expenses:Food  9.00 USD
+`
+
+	recordsPath := filepath.Join(tmpDir, "records.journal")
+	mainPath := filepath.Join(tmpDir, "main.journal")
+
+	err := os.WriteFile(recordsPath, []byte(recordsContent), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(mainPath, []byte(mainContent), 0644)
+	require.NoError(t, err)
+
+	ts := newTestServer()
+	uri := protocol.DocumentURI(fmt.Sprintf("file://%s", mainPath))
+
+	_, err = ts.openAndWait(uri, mainContent)
+	require.NoError(t, err)
+
+	// Hover over Assets:Cash on line 7 (0-indexed), character 6
+	hover, err := ts.hover(uri, 7)
+	require.NoError(t, err)
+	require.NotNil(t, hover)
+
+	hoverContent := hover.Contents.Value
+	t.Logf("Hover content:\n%s", hoverContent)
+
+	assert.Contains(t, hoverContent, "Assets:Cash")
+
+	// Total Assets:Cash: main(-25.70 + -18.00) + records(-25.70 + -9.00 + -6.20 + -5.00 + -17.70 + -7.80)
+	// = -43.70 + -71.40 = -115.10, 8 postings
+	assert.Contains(t, hoverContent, "115.10", "balance should include all postings from both files")
+	assert.Contains(t, hoverContent, "Postings:** 8", "should count all 8 postings across both files")
+}
+
+func TestIntegration_Issue18_CRLFIncludedFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Included file with CRLF line endings (as on Windows)
+	recordsContent := "2026-01-01 Cafe\r\n    Assets:Cash  -25.70 USD\r\n    Assets:Cash  -9.00 USD\r\n    Expenses:Occasions  25.70 USD\r\n    Expenses:Occasions  9.00 USD\r\n\r\n2026-01-01 Payee1\r\n    Assets:Cash  -6.20 USD\r\n    Expenses:Occasions  6.20 USD\r\n\r\n2026-03-17 Payee2\r\n    Assets:Cash  -5.00 USD\r\n    Expenses:Food  5.00 USD\r\n\r\n2026-03-17 Payee2\r\n    Assets:Cash  -17.70 USD\r\n    Expenses:Food  17.70 USD\r\n\r\n2026-03-18 Payee2\r\n    Assets:Cash  -7.80 USD\r\n    Expenses:Food  7.80 USD\r\n"
+
+	mainContent := `include records.journal
+
+account Assets:Cash
+account Expenses:Food
+account Expenses:Occasions
+
+2026-01-01 Test
+    Assets:Cash  -25.70 USD
+    Assets:Cash  -18.00 USD
+    Expenses:Occasions  25.70 USD
+    Expenses:Occasions  9.00 USD
+    Expenses:Food  9.00 USD
+`
+
+	recordsPath := filepath.Join(tmpDir, "records.journal")
+	mainPath := filepath.Join(tmpDir, "main.journal")
+
+	err := os.WriteFile(recordsPath, []byte(recordsContent), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(mainPath, []byte(mainContent), 0644)
+	require.NoError(t, err)
+
+	ts := newTestServer()
+	uri := protocol.DocumentURI(fmt.Sprintf("file://%s", mainPath))
+
+	_, err = ts.openAndWait(uri, mainContent)
+	require.NoError(t, err)
+
+	hover, err := ts.hover(uri, 7)
+	require.NoError(t, err)
+	require.NotNil(t, hover)
+
+	hoverContent := hover.Contents.Value
+	t.Logf("Hover content:\n%s", hoverContent)
+
+	assert.Contains(t, hoverContent, "Assets:Cash")
+	assert.Contains(t, hoverContent, "115.10", "balance should be correct even with CRLF included file")
+	assert.Contains(t, hoverContent, "Postings:** 8", "should count all 8 postings even with CRLF included file")
+}
+
+func TestIntegration_Issue18_WorkspaceFolderMode(t *testing.T) {
+	t.Setenv("LEDGER_FILE", "")
+	t.Setenv("HLEDGER_JOURNAL", "")
+
+	tmpDir := t.TempDir()
+
+	// CRLF included file (as on Windows)
+	recordsContent := "2026-01-01 Cafe\r\n    Assets:Cash  -25.70 USD\r\n    Assets:Cash  -9.00 USD\r\n    Expenses:Occasions  25.70 USD\r\n    Expenses:Occasions  9.00 USD\r\n\r\n2026-01-01 Payee1\r\n    Assets:Cash  -6.20 USD\r\n    Expenses:Occasions  6.20 USD\r\n"
+
+	mainContent := "include records.journal\r\n\r\naccount Assets:Cash\r\naccount Expenses:Food\r\naccount Expenses:Occasions\r\n\r\n2026-01-01 Test\r\n    Assets:Cash  -25.70 USD\r\n    Assets:Cash  -18.00 USD\r\n    Expenses:Occasions  25.70 USD\r\n    Expenses:Occasions  9.00 USD\r\n    Expenses:Food  9.00 USD\r\n"
+
+	recordsPath := filepath.Join(tmpDir, "records.journal")
+	mainPath := filepath.Join(tmpDir, "main.journal")
+
+	err := os.WriteFile(recordsPath, []byte(recordsContent), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(mainPath, []byte(mainContent), 0644)
+	require.NoError(t, err)
+
+	// Simulate workspace folder mode
+	ts := newTestServer()
+	_, err = ts.Initialize(context.Background(), &protocol.InitializeParams{
+		WorkspaceFolders: []protocol.WorkspaceFolder{
+			{URI: fmt.Sprintf("file://%s", tmpDir), Name: "test"},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ts.workspace)
+
+	err = ts.Initialized(context.Background(), &protocol.InitializedParams{})
+	require.NoError(t, err)
+
+	uri := protocol.DocumentURI(fmt.Sprintf("file://%s", mainPath))
+
+	// Normalize main content for DidOpen (as VS Code does)
+	mainContentLF := strings.ReplaceAll(mainContent, "\r\n", "\n")
+	_, err = ts.openAndWait(uri, mainContentLF)
+	require.NoError(t, err)
+
+	hover, err := ts.hover(uri, 7)
+	require.NoError(t, err)
+	require.NotNil(t, hover, "hover should not be nil in workspace folder mode")
+
+	hoverContent := hover.Contents.Value
+	t.Logf("Hover content:\n%s", hoverContent)
+
+	assert.Contains(t, hoverContent, "Assets:Cash")
+	// main: -25.70 + -18.00 = -43.70 (2 postings)
+	// records: -25.70 + -9.00 + -6.20 = -40.90 (3 postings)
+	// Total: -84.60, 5 postings
+	assert.Contains(t, hoverContent, "Postings:** 5", "workspace mode should aggregate postings from included files")
+}
+
+func TestIntegration_Issue18_GlobIncludeWithSubdirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create subdirectory structure matching user's setup: 2026/2026-Records.journal
+	subDir := filepath.Join(tmpDir, "2026")
+	err := os.MkdirAll(subDir, 0755)
+	require.NoError(t, err)
+
+	recordsContent := `2026-01-01 Cafe
+    Assets:Cash  -25.70 USD
+    Assets:Cash  -9.00 USD
+    Expenses:Occasions  25.70 USD
+    Expenses:Occasions  9.00 USD
+
+2026-01-01 Payee1
+    Assets:Cash  -6.20 USD
+    Expenses:Occasions  6.20 USD
+
+2026-03-17 Payee2
+    Assets:Cash  -5.00 USD
+    Expenses:Food  5.00 USD
+
+2026-03-17 Payee2
+    Assets:Cash  -17.70 USD
+    Expenses:Food  17.70 USD
+
+2026-03-18 Payee2
+    Assets:Cash  -7.80 USD
+    Expenses:Food  7.80 USD
+`
+
+	// Use the same glob pattern as the user: 20[1-7][0-9]/20[1-7][0-9]-Records.journal
+	mainContent := "include 20[1-7][0-9]/20[1-7][0-9]-Records.journal\n\naccount Assets:Cash\naccount Expenses:Food\naccount Expenses:Occasions\n\n2026-01-01 Test\n    Assets:Cash  -25.70 USD\n    Assets:Cash  -18.00 USD\n    Expenses:Occasions  25.70 USD\n    Expenses:Occasions  9.00 USD\n    Expenses:Food  9.00 USD\n"
+
+	recordsPath := filepath.Join(subDir, "2026-Records.journal")
+	mainPath := filepath.Join(tmpDir, "main.journal")
+
+	err = os.WriteFile(recordsPath, []byte(recordsContent), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(mainPath, []byte(mainContent), 0644)
+	require.NoError(t, err)
+
+	ts := newTestServer()
+	uri := protocol.DocumentURI(fmt.Sprintf("file://%s", mainPath))
+
+	_, err = ts.openAndWait(uri, mainContent)
+	require.NoError(t, err)
+
+	// Hover over Assets:Cash on line 7 (0-indexed), character 6
+	hover, err := ts.hover(uri, 7)
+	require.NoError(t, err)
+	require.NotNil(t, hover)
+
+	hoverContent := hover.Contents.Value
+	t.Logf("Hover content:\n%s", hoverContent)
+
+	assert.Contains(t, hoverContent, "Assets:Cash")
+	assert.Contains(t, hoverContent, "115.10", "balance should include all postings from both files")
+	assert.Contains(t, hoverContent, "Postings:** 8", "should count all 8 postings across both files")
 }

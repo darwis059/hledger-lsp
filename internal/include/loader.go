@@ -8,11 +8,21 @@ import (
 	"sort"
 	"sync"
 
+	"strings"
+
 	"github.com/bmatcuk/doublestar/v4"
 
 	"github.com/juev/hledger-lsp/internal/ast"
 	"github.com/juev/hledger-lsp/internal/parser"
 )
+
+// normalizeLineEndings converts \r\n and \r to \n.
+// The parser assumes \n-only input. Files read from disk on Windows may have CRLF.
+func normalizeLineEndings(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return s
+}
 
 const (
 	defaultMaxFileSizeBytes = 10 * 1024 * 1024
@@ -94,7 +104,7 @@ func (l *Loader) Load(path string) (*ResolvedJournal, []LoadError) {
 		}}
 	}
 
-	return l.loadWithContent(path, string(content), make(map[string]bool))
+	return l.loadWithContent(path, normalizeLineEndings(string(content)), make(map[string]bool))
 }
 
 func (l *Loader) LoadFromContent(path, content string) (*ResolvedJournal, []LoadError) {
@@ -242,7 +252,7 @@ func (l *Loader) loadSingleInclude(
 		return errors
 	}
 
-	subResult, subErrors := l.loadWithContent(includePath, string(incContent), visited)
+	subResult, subErrors := l.loadWithContent(includePath, normalizeLineEndings(string(incContent)), visited)
 	errors = append(errors, subErrors...)
 
 	if subResult != nil && subResult.Primary != nil {
