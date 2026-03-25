@@ -275,7 +275,7 @@ func (s *Server) DidSave(ctx context.Context, params *protocol.DidSaveTextDocume
 			if content, ok := s.GetDocument(params.TextDocument.URI); ok {
 				s.workspace.UpdateFile(path, content)
 			} else if data, err := os.ReadFile(path); err == nil {
-				s.workspace.UpdateFile(path, string(data))
+				s.workspace.UpdateFile(path, normalizeLineEndings(string(data)))
 			}
 			s.loader.InvalidateFile(path)
 		}
@@ -465,7 +465,7 @@ func (s *Server) DidChangeWatchedFiles(ctx context.Context, params *protocol.Did
 
 		if change.Type == protocol.FileChangeTypeChanged || change.Type == protocol.FileChangeTypeCreated {
 			if data, err := os.ReadFile(path); err == nil {
-				s.workspace.UpdateFile(path, string(data))
+				s.workspace.UpdateFile(path, normalizeLineEndings(string(data)))
 			}
 		}
 

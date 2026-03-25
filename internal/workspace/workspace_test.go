@@ -942,3 +942,73 @@ func TestBuildIncludeGraph_GlobExpansion_FindRoot(t *testing.T) {
 	assert.Equal(t, rootPath, ws.RootJournalPath(),
 		"zzz_root.journal should be detected as root even with glob include")
 }
+
+func TestBuildIncludeGraph_CRLF(t *testing.T) {
+	t.Setenv("LEDGER_FILE", "")
+	t.Setenv("HLEDGER_JOURNAL", "")
+
+	tmpDir := t.TempDir()
+
+	// No main.journal — force findRootByIncludeGraph fallback.
+	// Root file has CRLF line endings (as on Windows).
+	rootContent := "include child.journal\r\n\r\n2024-01-01 Main\r\n    expenses:food  $10\r\n    assets:cash\r\n"
+	rootPath := filepath.Join(tmpDir, "zzz_root.journal")
+	require.NoError(t, os.WriteFile(rootPath, []byte(rootContent), 0644))
+
+	childContent := "2024-01-02 Child\r\n    expenses:rent  $100\r\n    assets:bank\r\n"
+	childPath := filepath.Join(tmpDir, "child.journal")
+	require.NoError(t, os.WriteFile(childPath, []byte(childContent), 0644))
+
+	loader := include.NewLoader()
+	ws := NewWorkspace(tmpDir, loader)
+
+	err := ws.Initialize()
+	require.NoError(t, err)
+
+	// Without CRLF normalization in buildIncludeGraph, the include path would be
+	// "child.journal\r" which doesn't match any file → root detection fails.
+	assert.Equal(t, rootPath, ws.RootJournalPath(),
+		"should find root even with CRLF line endings in journal files")
+
+	// Verify the included file's transactions are loaded
+	resolved := ws.GetResolved()
+	require.NotNil(t, resolved)
+	allTx := resolved.AllTransactions()
+	assert.Len(t, allTx, 2, "should have transactions from both root and child")
+}
+
+func TestWorkspace_AddMissingReachable_CRLF(t *testing.T) {
+	t.Setenv("LEDGER_FILE", "")
+	t.Setenv("HLEDGER_JOURNAL", "")
+
+	tmpDir := t.TempDir()
+
+	// Start with main.journal that has no includes
+	mainContent := "2024-01-01 Main\n    expenses:food  $10\n    assets:cash\n"
+	mainPath := filepath.Join(tmpDir, "main.journal")
+	require.NoError(t, os.WriteFile(mainPath, []byte(mainContent), 0644))
+
+	// Child file with CRLF on disk
+	childContent := "2024-01-02 Child\r\n    expenses:rent  $100\r\n    assets:bank\r\n"
+	childPath := filepath.Join(tmpDir, "child.journal")
+	require.NoError(t, os.WriteFile(childPath, []byte(childContent), 0644))
+
+	loader := include.NewLoader()
+	ws := NewWorkspace(tmpDir, loader)
+	require.NoError(t, ws.Initialize())
+
+	// Now add include directive — this triggers refreshIncludeTreeLocked → addMissingReachableLocked
+	ws.UpdateFile(mainPath, "include child.journal\n\n2024-01-01 Main\n    expenses:food  $10\n    assets:cash\n")
+
+	resolved := ws.GetResolved()
+	require.NotNil(t, resolved)
+
+	allTx := resolved.AllTransactions()
+	assert.Len(t, allTx, 2, "should have transactions from both files after include added")
+
+	// Verify the child was parsed correctly (CRLF normalized)
+	snapshot := ws.IndexSnapshot()
+	assert.Contains(t, snapshot.Accounts.All, "expenses:rent",
+		"child file accounts should be available (CRLF must be normalized)")
+	assert.Contains(t, snapshot.Accounts.All, "assets:bank")
+}

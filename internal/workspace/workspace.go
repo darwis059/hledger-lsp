@@ -14,6 +14,14 @@ import (
 	"github.com/juev/hledger-lsp/internal/parser"
 )
 
+// normalizeLineEndings converts \r\n and \r to \n.
+// The parser assumes \n-only input. Files read from disk on Windows may have CRLF.
+func normalizeLineEndings(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return s
+}
+
 type Workspace struct {
 	mu                sync.RWMutex
 	rootURI           string
@@ -178,7 +186,7 @@ func (w *Workspace) buildIncludeGraph(files []string) {
 			continue
 		}
 
-		journal, errs := parser.Parse(string(content))
+		journal, errs := parser.Parse(normalizeLineEndings(string(content)))
 		if len(errs) > 0 {
 			for _, e := range errs {
 				w.parseErrors = append(w.parseErrors, fmt.Sprintf("%s: %s", file, e.Message))
@@ -385,7 +393,7 @@ func (w *Workspace) addMissingReachableLocked(reachable map[string]bool) bool {
 		if err != nil {
 			continue
 		}
-		fileIndex, journal, _ := BuildFileIndexFromContent(path, string(content))
+		fileIndex, journal, _ := BuildFileIndexFromContent(path, normalizeLineEndings(string(content)))
 		w.index.SetFileIndex(path, fileIndex)
 		w.updateIncludeEdgesLocked(path, nil, fileIndex.Includes)
 		w.updateResolvedLocked(path, journal)
