@@ -69,11 +69,11 @@ func (s *Server) Initialize(ctx context.Context, params *protocol.InitializePara
 		s.setSettings(settings)
 
 		if len(params.WorkspaceFolders) > 0 {
-			s.rootURI = strings.TrimPrefix(params.WorkspaceFolders[0].URI, "file://")
+			s.rootURI = uriToPath(protocol.DocumentURI(params.WorkspaceFolders[0].URI))
 		} else {
 			rootURI := params.RootURI //nolint:staticcheck
 			if rootURI != "" {
-				s.rootURI = strings.TrimPrefix(string(rootURI), "file://")
+				s.rootURI = uriToPath(rootURI)
 			}
 		}
 	}

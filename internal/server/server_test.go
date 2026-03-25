@@ -1475,3 +1475,44 @@ func TestServer_RulesDiagnostics_PositionConversion(t *testing.T) {
 	assert.Equal(t, uint32(0), found.Range.Start.Line, "Start.Line must be 0-based")
 	assert.Equal(t, uint32(0), found.Range.Start.Character, "Start.Character must be 0-based")
 }
+
+func TestInitialize_RootURIParsing(t *testing.T) {
+	tests := []struct {
+		name     string
+		uri      string
+		wantPath string
+	}{
+		{
+			name:     "Unix-style URI",
+			uri:      "file:///home/user/workspace",
+			wantPath: "/home/user/workspace",
+		},
+		{
+			name:     "URI with workspace folders",
+			uri:      "file:///tmp/test-workspace",
+			wantPath: "/tmp/test-workspace",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := NewServer()
+			_, err := srv.Initialize(context.Background(), &protocol.InitializeParams{
+				WorkspaceFolders: []protocol.WorkspaceFolder{
+					{URI: tt.uri, Name: "test"},
+				},
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantPath, srv.rootURI)
+		})
+	}
+}
+
+func TestInitialize_RootURIFromRootURI(t *testing.T) {
+	srv := NewServer()
+	_, err := srv.Initialize(context.Background(), &protocol.InitializeParams{
+		RootURI: "file:///tmp/fallback-workspace", //nolint:staticcheck
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "/tmp/fallback-workspace", srv.rootURI)
+}

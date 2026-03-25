@@ -190,6 +190,22 @@ func (w *Workspace) buildIncludeGraph(files []string) {
 
 		dir := filepath.Dir(file)
 		for _, inc := range journal.Includes {
+			if include.IsGlobPattern(inc.Path) {
+				matches, err := w.loader.ExpandGlob(file, inc.Path)
+				if err != nil {
+					continue
+				}
+				for _, match := range matches {
+					absMatch, _ := filepath.Abs(match)
+					if absMatch == "" {
+						absMatch = match
+					}
+					w.includeGraph[file] = append(w.includeGraph[file], absMatch)
+					w.reverseGraph[absMatch] = append(w.reverseGraph[absMatch], file)
+				}
+				continue
+			}
+
 			incPath := inc.Path
 			if !filepath.IsAbs(incPath) {
 				incPath = filepath.Join(dir, incPath)

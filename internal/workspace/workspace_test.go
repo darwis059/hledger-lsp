@@ -870,3 +870,75 @@ commodity RUB
 	assert.Equal(t, 2, defaultFormat.DecimalPlaces,
 		"default format should come from D directive, not decimal-mark")
 }
+
+func TestBuildIncludeGraph_GlobExpansion(t *testing.T) {
+	t.Setenv("LEDGER_FILE", "")
+	t.Setenv("HLEDGER_JOURNAL", "")
+
+	tmpDir := t.TempDir()
+
+	mainContent := "include *.journal\n"
+	mainPath := filepath.Join(tmpDir, "main.journal")
+	err := os.WriteFile(mainPath, []byte(mainContent), 0644)
+	require.NoError(t, err)
+
+	tx1Content := "2024-01-01 payee1\n    expenses:food  10 USD\n    assets:cash\n"
+	tx1Path := filepath.Join(tmpDir, "tx1.journal")
+	err = os.WriteFile(tx1Path, []byte(tx1Content), 0644)
+	require.NoError(t, err)
+
+	tx2Content := "2024-01-02 payee2\n    expenses:food  20 USD\n    assets:cash\n"
+	tx2Path := filepath.Join(tmpDir, "tx2.journal")
+	err = os.WriteFile(tx2Path, []byte(tx2Content), 0644)
+	require.NoError(t, err)
+
+	loader := include.NewLoader()
+	ws := NewWorkspace(tmpDir, loader)
+
+	err = ws.Initialize()
+	require.NoError(t, err)
+
+	// Verify both included files are in the reverse graph
+	includedBy := ws.GetIncludedBy(tx1Path)
+	assert.Contains(t, includedBy, mainPath, "tx1 should be included by main")
+
+	includedBy = ws.GetIncludedBy(tx2Path)
+	assert.Contains(t, includedBy, mainPath, "tx2 should be included by main")
+
+	// Verify all transactions are available via resolved journal
+	resolved := ws.GetResolved()
+	require.NotNil(t, resolved)
+	allTx := resolved.AllTransactions()
+	assert.Len(t, allTx, 2, "should have transactions from both included files")
+}
+
+func TestBuildIncludeGraph_GlobExpansion_FindRoot(t *testing.T) {
+	t.Setenv("LEDGER_FILE", "")
+	t.Setenv("HLEDGER_JOURNAL", "")
+
+	tmpDir := t.TempDir()
+
+	// No main.journal — root must be found via include graph.
+	// Name the root file "zzz_root.journal" so it is alphabetically LAST —
+	// without glob expansion in buildIncludeGraph, the included file would be
+	// picked as root candidate because reverseGraph misses it.
+	rootContent := "include a_*.journal\n"
+	rootPath := filepath.Join(tmpDir, "zzz_root.journal")
+	err := os.WriteFile(rootPath, []byte(rootContent), 0644)
+	require.NoError(t, err)
+
+	tx1Content := "2024-01-01 payee1\n    expenses:food  10 USD\n    assets:cash\n"
+	tx1Path := filepath.Join(tmpDir, "a_tx1.journal")
+	err = os.WriteFile(tx1Path, []byte(tx1Content), 0644)
+	require.NoError(t, err)
+
+	loader := include.NewLoader()
+	ws := NewWorkspace(tmpDir, loader)
+
+	err = ws.Initialize()
+	require.NoError(t, err)
+
+	// zzz_root.journal should be the root (it includes others, nothing includes it)
+	assert.Equal(t, rootPath, ws.RootJournalPath(),
+		"zzz_root.journal should be detected as root even with glob include")
+}

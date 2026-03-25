@@ -5,11 +5,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.lsp.dev/protocol"
 
 	"github.com/juev/hledger-lsp/internal/ast"
+	"github.com/juev/hledger-lsp/internal/formatter"
 )
 
 func TestPositionInRange(t *testing.T) {
@@ -1053,4 +1055,65 @@ func TestHover_AccountBalanceNoDefaultCommodityKeepsSeparate(t *testing.T) {
 	assert.Contains(t, result.Contents.Value, "Balance")
 	assert.Contains(t, result.Contents.Value, "RUB")
 	assert.Contains(t, result.Contents.Value, "-71")
+}
+
+func TestHover_AccountBalanceDecimalPrecision(t *testing.T) {
+	srv := NewServer()
+	content := `2024-01-15 grocery
+    expenses:food  25.70 USD
+    assets:cash  -25.70 USD
+
+2024-01-16 restaurant
+    expenses:food  9.00 USD
+    assets:cash  -9.00 USD`
+
+	srv.documents.Store(protocol.DocumentURI("file:///test.journal"), content)
+
+	params := &protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///test.journal",
+			},
+			Position: protocol.Position{Line: 1, Character: 6},
+		},
+	}
+
+	result, err := srv.Hover(context.Background(), params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Contains(t, result.Contents.Value, "expenses:food")
+	assert.Contains(t, result.Contents.Value, "34.70")
+	assert.Contains(t, result.Contents.Value, "Postings:** 2")
+}
+
+func TestEnrichCommodityFormatsFromTransactions_DecimalPlaces(t *testing.T) {
+	transactions := []ast.Transaction{
+		{
+			Postings: []ast.Posting{
+				{
+					Amount: &ast.Amount{
+						Quantity:    decimal.NewFromFloat(25.70),
+						RawQuantity: "25.70",
+						Commodity:   ast.Commodity{Symbol: "USD", Position: ast.CommodityRight},
+					},
+				},
+				{
+					Amount: &ast.Amount{
+						Quantity:    decimal.NewFromFloat(9.00),
+						RawQuantity: "9.00",
+						Commodity:   ast.Commodity{Symbol: "USD", Position: ast.CommodityRight},
+					},
+				},
+			},
+		},
+	}
+
+	formats := make(map[string]formatter.CommodityFormat)
+	enrichCommodityFormatsFromTransactions(formats, transactions)
+
+	usdFormat, ok := formats["USD"]
+	require.True(t, ok, "USD format should be present")
+	assert.True(t, usdFormat.HasDecimal, "HasDecimal should be true")
+	assert.Equal(t, 2, usdFormat.DecimalPlaces, "DecimalPlaces should be 2")
 }

@@ -272,15 +272,46 @@ func enrichCommodityFormatsFromTransactions(formats map[string]formatter.Commodi
 			if amt == nil || amt.Commodity.Symbol == "" {
 				continue
 			}
-			if _, ok := formats[amt.Commodity.Symbol]; ok {
-				continue
+			sym := amt.Commodity.Symbol
+			existing, ok := formats[sym]
+			if !ok {
+				existing = formatter.CommodityFormat{
+					Position:     amt.Commodity.Position,
+					SpaceBetween: formatter.DefaultSpaceBetween(amt.Commodity.Position, sym),
+				}
 			}
-			formats[amt.Commodity.Symbol] = formatter.CommodityFormat{
-				Position:     amt.Commodity.Position,
-				SpaceBetween: formatter.DefaultSpaceBetween(amt.Commodity.Position, amt.Commodity.Symbol),
+			dp := decimalPlaces(amt)
+			if dp > existing.DecimalPlaces {
+				existing.DecimalPlaces = dp
+				existing.HasDecimal = true
+				existing.DecimalMark = '.'
 			}
+			formats[sym] = existing
 		}
 	}
+}
+
+// decimalPlaces returns the number of decimal places in an amount,
+// preferring RawQuantity string parsing over Decimal.Exponent().
+func decimalPlaces(amt *ast.Amount) int {
+	if amt.RawQuantity != "" {
+		if idx := strings.LastIndexByte(amt.RawQuantity, '.'); idx >= 0 {
+			return len(amt.RawQuantity) - idx - 1
+		}
+		if idx := strings.LastIndexByte(amt.RawQuantity, ','); idx >= 0 {
+			// comma as decimal mark (e.g., "25,70")
+			after := amt.RawQuantity[idx+1:]
+			if len(after) <= 3 {
+				return len(after)
+			}
+		}
+		return 0
+	}
+	exp := amt.Quantity.Exponent()
+	if exp < 0 {
+		return int(-exp)
+	}
+	return 0
 }
 
 func defaultCommoditySymbol(directives []ast.Directive) string {

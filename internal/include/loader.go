@@ -289,6 +289,12 @@ func (l *Loader) expandGlob(basePath, pattern string) ([]string, error) {
 	return matches, nil
 }
 
+// ExpandGlob resolves a glob pattern relative to basePath and returns
+// matching file paths, excluding basePath itself.
+func (l *Loader) ExpandGlob(basePath, pattern string) ([]string, error) {
+	return l.expandGlob(basePath, pattern)
+}
+
 func (l *Loader) ClearCache() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
