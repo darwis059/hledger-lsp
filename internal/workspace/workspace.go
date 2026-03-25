@@ -89,29 +89,11 @@ func (w *Workspace) ParseErrors() []string {
 	return w.parseErrors
 }
 
-func expandTilde(path string) string {
-	if strings.HasPrefix(path, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, path[2:])
-		}
-	}
-	return path
-}
-
 func (w *Workspace) findRootJournal() (string, error) {
-	if envPath := os.Getenv("LEDGER_FILE"); envPath != "" {
-		envPath = expandTilde(envPath)
-		if _, err := os.Stat(envPath); err == nil {
-			return envPath, nil
-		}
-	}
-	if envPath := os.Getenv("HLEDGER_JOURNAL"); envPath != "" {
-		envPath = expandTilde(envPath)
-		if _, err := os.Stat(envPath); err == nil {
-			return envPath, nil
-		}
-	}
-
+	// Workspace mode: only look for journals inside the opened folder.
+	// Environment variables (LEDGER_FILE, HLEDGER_JOURNAL) are intentionally
+	// ignored — they typically point to the user's primary journal which may
+	// be completely unrelated to the workspace being edited.
 	mainPath := filepath.Join(w.rootURI, "main.journal")
 	if _, err := os.Stat(mainPath); err == nil {
 		return mainPath, nil

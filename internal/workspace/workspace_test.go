@@ -35,18 +35,21 @@ func TestWorkspace_FindRootJournal_MainJournal(t *testing.T) {
 	assert.Equal(t, mainPath, ws.RootJournalPath())
 }
 
-func TestWorkspace_FindRootJournal_EnvVariable(t *testing.T) {
+func TestWorkspace_FindRootJournal_EnvVarIgnored(t *testing.T) {
+	// Workspace mode ignores env vars entirely — they may point to
+	// a completely unrelated journal outside the workspace.
 	tmpDir := t.TempDir()
+	externalDir := t.TempDir()
 
-	customPath := filepath.Join(tmpDir, "custom.journal")
-	err := os.WriteFile(customPath, []byte(""), 0644)
+	externalJournal := filepath.Join(externalDir, "real.journal")
+	err := os.WriteFile(externalJournal, []byte("2024-01-01 Real\n    expenses:food  $10\n    assets:cash\n"), 0644)
 	require.NoError(t, err)
 
 	mainPath := filepath.Join(tmpDir, "main.journal")
-	err = os.WriteFile(mainPath, []byte(""), 0644)
+	err = os.WriteFile(mainPath, []byte("2024-01-01 Test\n    expenses:test  $5\n    assets:bank\n"), 0644)
 	require.NoError(t, err)
 
-	t.Setenv("LEDGER_FILE", customPath)
+	t.Setenv("LEDGER_FILE", externalJournal)
 
 	loader := include.NewLoader()
 	ws := NewWorkspace(tmpDir, loader)
@@ -54,7 +57,42 @@ func TestWorkspace_FindRootJournal_EnvVariable(t *testing.T) {
 	err = ws.Initialize()
 	require.NoError(t, err)
 
-	assert.Equal(t, customPath, ws.RootJournalPath())
+	assert.Equal(t, mainPath, ws.RootJournalPath(),
+		"workspace should use local main.journal, not LEDGER_FILE")
+
+	resolved := ws.GetResolved()
+	require.NotNil(t, resolved)
+	allTx := resolved.AllTransactions()
+	require.Len(t, allTx, 1)
+	assert.Equal(t, "Test", allTx[0].Description)
+}
+
+func TestWorkspace_FindRootJournal_EnvVarIgnoredNoLocal(t *testing.T) {
+	// Even when workspace has no main.journal, env vars pointing outside
+	// should be ignored. Root detection falls through to include graph.
+	tmpDir := t.TempDir()
+	externalDir := t.TempDir()
+
+	externalJournal := filepath.Join(externalDir, "real.journal")
+	err := os.WriteFile(externalJournal, []byte(""), 0644)
+	require.NoError(t, err)
+
+	// Only a non-standard journal in the workspace
+	rootPath := filepath.Join(tmpDir, "ledger.journal")
+	err = os.WriteFile(rootPath, []byte("2024-01-01 Local\n    expenses:food  $10\n    assets:cash\n"), 0644)
+	require.NoError(t, err)
+
+	t.Setenv("LEDGER_FILE", externalJournal)
+
+	loader := include.NewLoader()
+	ws := NewWorkspace(tmpDir, loader)
+
+	err = ws.Initialize()
+	require.NoError(t, err)
+
+	// Should find ledger.journal via include graph scan, not external env var
+	assert.Equal(t, rootPath, ws.RootJournalPath(),
+		"workspace should find local journal via include graph, not use external LEDGER_FILE")
 }
 
 func TestWorkspace_FindRootJournal_NotIncludedFile(t *testing.T) {
@@ -239,56 +277,6 @@ func TestWorkspace_GetDeclaredAccounts_NilResolved(t *testing.T) {
 
 	declared := ws.GetDeclaredAccounts()
 	assert.Nil(t, declared)
-}
-
-func TestExpandTilde(t *testing.T) {
-	home, err := os.UserHomeDir()
-	require.NoError(t, err)
-
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"~/test.journal", filepath.Join(home, "test.journal")},
-		{"~/.hledger/main.journal", filepath.Join(home, ".hledger/main.journal")},
-		{"/absolute/path.journal", "/absolute/path.journal"},
-		{"relative/path.journal", "relative/path.journal"},
-		{"~", "~"},
-		{"~user/path", "~user/path"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := expandTilde(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestWorkspace_FindRootJournal_EnvWithTilde(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	customPath := filepath.Join(tmpDir, "custom.journal")
-	err := os.WriteFile(customPath, []byte(""), 0644)
-	require.NoError(t, err)
-
-	home, err := os.UserHomeDir()
-	require.NoError(t, err)
-
-	relPath, err := filepath.Rel(home, customPath)
-	if err != nil {
-		t.Skip("temp dir is not under home directory")
-	}
-
-	t.Setenv("LEDGER_FILE", "~/"+relPath)
-
-	loader := include.NewLoader()
-	ws := NewWorkspace(tmpDir, loader)
-
-	err = ws.Initialize()
-	require.NoError(t, err)
-
-	assert.Equal(t, customPath, ws.RootJournalPath())
 }
 
 func TestWorkspace_IndexSnapshot_FromIncludes(t *testing.T) {
