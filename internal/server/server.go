@@ -312,7 +312,7 @@ func (s *Server) publishDiagnostics(ctx context.Context, docURI protocol.Documen
 	resolved, loadErrors := s.loader.LoadFromContent(path, content)
 	s.resolved.Store(docURI, resolved)
 
-	diagnostics := s.analyze(content)
+	diagnostics := s.analyze(path, content)
 
 	for _, err := range loadErrors {
 		severity := protocol.DiagnosticSeverityError
@@ -333,7 +333,7 @@ func (s *Server) publishDiagnostics(ctx context.Context, docURI protocol.Documen
 	})
 }
 
-func (s *Server) analyze(content string) []protocol.Diagnostic {
+func (s *Server) analyze(path, content string) []protocol.Diagnostic {
 	journal, parseErrs := parser.Parse(content)
 
 	diagnostics := make([]protocol.Diagnostic, 0, len(parseErrs))
@@ -357,8 +357,8 @@ func (s *Server) analyze(content string) []protocol.Diagnostic {
 
 	external := analyzer.ExternalDeclarations{}
 	if s.workspace != nil {
-		external.Accounts = s.workspace.GetDeclaredAccounts()
-		external.Commodities = s.workspace.GetDeclaredCommodities()
+		external.Accounts = s.workspace.GetDeclaredAccountsForFile(path)
+		external.Commodities = s.workspace.GetDeclaredCommoditiesForFile(path)
 	}
 
 	var result *analyzer.AnalysisResult
@@ -512,7 +512,7 @@ func (s *Server) Format(ctx context.Context, params *protocol.DocumentFormatting
 
 	var commodityFormats map[string]formatter.CommodityFormat
 	if s.workspace != nil {
-		commodityFormats = s.workspace.GetCommodityFormats()
+		commodityFormats = s.workspace.GetCommodityFormatsForFile(uriToPath(params.TextDocument.URI))
 	}
 
 	settings := s.getSettings()
@@ -569,7 +569,8 @@ func (s *Server) GetResolved(docURI protocol.DocumentURI) *include.ResolvedJourn
 
 func (s *Server) getWorkspaceResolved(docURI protocol.DocumentURI) *include.ResolvedJournal {
 	if s.workspace != nil {
-		if resolved := s.workspace.GetResolved(); resolved != nil {
+		path := uriToPath(docURI)
+		if resolved := s.workspace.GetResolvedForFile(path); resolved != nil {
 			return resolved
 		}
 	}

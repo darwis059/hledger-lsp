@@ -19,7 +19,7 @@ func (s *Server) RangeFormat(ctx context.Context, params *protocol.DocumentRange
 
 	var commodityFormats map[string]formatter.CommodityFormat
 	if s.workspace != nil {
-		commodityFormats = s.workspace.GetCommodityFormats()
+		commodityFormats = s.workspace.GetCommodityFormatsForFile(uriToPath(params.TextDocument.URI))
 	}
 
 	settings := s.getSettings()

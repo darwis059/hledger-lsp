@@ -22,26 +22,42 @@ func normalizeLineEndings(s string) string {
 	return s
 }
 
-type Workspace struct {
-	mu                sync.RWMutex
-	rootURI           string
-	rootJournalPath   string
-	resolved          *include.ResolvedJournal
-	includeGraph      map[string][]string
-	reverseGraph      map[string][]string
-	loader            *include.Loader
-	loadErrors        []include.LoadError
-	parseErrors       []string
+// IncludeTree represents a single include tree rooted at one journal file.
+// Each root file (file with no incoming include edges) gets its own tree
+// with an independent ResolvedJournal and caches.
+type IncludeTree struct {
+	RootPath          string
+	Resolved          *include.ResolvedJournal
+	LoadErrors        []include.LoadError
 	cachedFormats     map[string]formatter.CommodityFormat
 	cachedCommodities map[string]bool
 	cachedAccounts    map[string]bool
-	index             *WorkspaceIndex
+}
+
+func (t *IncludeTree) clearCaches() {
+	t.cachedFormats = nil
+	t.cachedCommodities = nil
+	t.cachedAccounts = nil
+}
+
+type Workspace struct {
+	mu           sync.RWMutex
+	rootURI      string
+	trees        map[string]*IncludeTree // rootPath → tree
+	fileTree     map[string]string       // filePath → rootPath
+	includeGraph map[string][]string
+	reverseGraph map[string][]string
+	loader       *include.Loader
+	parseErrors  []string
+	index        *WorkspaceIndex
 }
 
 func NewWorkspace(rootURI string, loader *include.Loader) *Workspace {
 	return &Workspace{
 		rootURI:      rootURI,
 		loader:       loader,
+		trees:        make(map[string]*IncludeTree),
+		fileTree:     make(map[string]string),
 		includeGraph: make(map[string][]string),
 		reverseGraph: make(map[string][]string),
 		index:        NewWorkspaceIndex(),
@@ -52,35 +68,46 @@ func (w *Workspace) Initialize() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.loadErrors = nil
 	w.parseErrors = nil
-	w.cachedFormats = nil
-	w.cachedCommodities = nil
-	w.cachedAccounts = nil
+	w.trees = make(map[string]*IncludeTree)
+	w.fileTree = make(map[string]string)
 	w.index = NewWorkspaceIndex()
 	w.includeGraph = make(map[string][]string)
 	w.reverseGraph = make(map[string][]string)
 
-	rootPath, err := w.findRootJournal()
+	roots, err := w.findRootJournals()
 	if err != nil {
 		return err
 	}
-	w.rootJournalPath = rootPath
 
-	if rootPath != "" {
+	for _, rootPath := range roots {
 		resolved, errs := w.loader.Load(rootPath)
-		w.resolved = resolved
-		w.loadErrors = errs
-		w.buildIndexFromResolvedLocked()
+		tree := &IncludeTree{
+			RootPath:   rootPath,
+			Resolved:   resolved,
+			LoadErrors: errs,
+		}
+		w.trees[rootPath] = tree
+		w.fileTree[rootPath] = rootPath
+		if resolved != nil {
+			for path := range resolved.Files {
+				w.fileTree[path] = rootPath
+			}
+		}
 	}
 
+	w.buildIndexFromResolvedLocked()
 	return nil
 }
 
 func (w *Workspace) LoadErrors() []include.LoadError {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	return w.loadErrors
+	var all []include.LoadError
+	for _, tree := range w.trees {
+		all = append(all, tree.LoadErrors...)
+	}
+	return all
 }
 
 func (w *Workspace) ParseErrors() []string {
@@ -89,32 +116,19 @@ func (w *Workspace) ParseErrors() []string {
 	return w.parseErrors
 }
 
-func (w *Workspace) findRootJournal() (string, error) {
-	// Workspace mode: only look for journals inside the opened folder.
-	// Environment variables (LEDGER_FILE, HLEDGER_JOURNAL) are intentionally
-	// ignored — they typically point to the user's primary journal which may
-	// be completely unrelated to the workspace being edited.
-	mainPath := filepath.Join(w.rootURI, "main.journal")
-	if _, err := os.Stat(mainPath); err == nil {
-		return mainPath, nil
-	}
-
-	hledgerPath := filepath.Join(w.rootURI, ".hledger.journal")
-	if _, err := os.Stat(hledgerPath); err == nil {
-		return hledgerPath, nil
-	}
-
-	return w.findRootByIncludeGraph()
-}
-
-func (w *Workspace) findRootByIncludeGraph() (string, error) {
+// findRootJournals discovers all root journal files in the workspace.
+// A root is a file with no incoming include edges (not included by anyone).
+// Environment variables (LEDGER_FILE, HLEDGER_JOURNAL) are intentionally
+// ignored — they typically point to the user's primary journal which may
+// be completely unrelated to the workspace being edited.
+func (w *Workspace) findRootJournals() ([]string, error) {
 	journalFiles, err := w.findJournalFiles()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if len(journalFiles) == 0 {
-		return "", nil
+		return nil, nil
 	}
 
 	w.buildIncludeGraph(journalFiles)
@@ -126,12 +140,13 @@ func (w *Workspace) findRootByIncludeGraph() (string, error) {
 		}
 	}
 
+	// All files in a cycle — treat all as roots
 	if len(rootCandidates) == 0 {
-		return journalFiles[0], nil
+		rootCandidates = append(rootCandidates, journalFiles...)
 	}
 
 	sort.Strings(rootCandidates)
-	return rootCandidates[0], nil
+	return rootCandidates, nil
 }
 
 var excludedDirs = map[string]bool{
@@ -208,16 +223,61 @@ func (w *Workspace) buildIncludeGraph(files []string) {
 	}
 }
 
+// RootJournalPath returns the root path of the first tree (for backward compatibility).
 func (w *Workspace) RootJournalPath() string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	return w.rootJournalPath
+	// Return the first tree root in sorted order for determinism
+	for _, tree := range w.sortedTrees() {
+		return tree.RootPath
+	}
+	return ""
 }
 
+// GetResolved returns the resolved journal of the first tree (for backward compatibility).
 func (w *Workspace) GetResolved() *include.ResolvedJournal {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	return w.resolved
+	for _, tree := range w.sortedTrees() {
+		return tree.Resolved
+	}
+	return nil
+}
+
+// GetResolvedForFile returns the resolved journal for the include tree
+// that contains the given file path.
+func (w *Workspace) GetResolvedForFile(path string) *include.ResolvedJournal {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	rootPath, ok := w.fileTree[path]
+	if !ok {
+		return nil
+	}
+	tree, ok := w.trees[rootPath]
+	if !ok {
+		return nil
+	}
+	return tree.Resolved
+}
+
+// RootForFile returns the root journal path for the tree containing the given file.
+func (w *Workspace) RootForFile(path string) string {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.fileTree[path]
+}
+
+func (w *Workspace) sortedTrees() []*IncludeTree {
+	keys := make([]string, 0, len(w.trees))
+	for k := range w.trees {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	result := make([]*IncludeTree, 0, len(keys))
+	for _, k := range keys {
+		result = append(result, w.trees[k])
+	}
+	return result
 }
 
 func (w *Workspace) IndexSnapshot() IndexSnapshot {
@@ -236,10 +296,16 @@ func (w *Workspace) UpdateFile(path, content string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if w.rootJournalPath == "" || w.index == nil {
+	if len(w.trees) == 0 || w.index == nil {
 		return
 	}
 	if !w.isWorkspaceFileLocked(path) {
+		return
+	}
+
+	rootPath := w.fileTree[path]
+	tree := w.trees[rootPath]
+	if tree == nil {
 		return
 	}
 
@@ -252,11 +318,11 @@ func (w *Workspace) UpdateFile(path, content string) {
 	fileIndex, journal, _ := BuildFileIndexFromContent(path, content)
 	w.index.SetFileIndex(path, fileIndex)
 	w.updateIncludeEdgesLocked(path, oldIncludes, fileIndex.Includes)
-	w.updateResolvedLocked(path, journal)
-	w.clearCachesLocked()
+	w.updateResolvedForTreeLocked(tree, path, journal)
+	tree.clearCaches()
 
 	if !sameStringSlice(oldIncludes, fileIndex.Includes) {
-		w.refreshIncludeTreeLocked()
+		w.refreshTreeLocked(tree)
 	}
 }
 
@@ -264,34 +330,35 @@ func (w *Workspace) buildIndexFromResolvedLocked() {
 	if w.index == nil {
 		w.index = NewWorkspaceIndex()
 	}
-	if w.resolved == nil || w.resolved.Primary == nil {
-		return
-	}
+	for _, tree := range w.trees {
+		if tree.Resolved == nil || tree.Resolved.Primary == nil {
+			continue
+		}
+		w.index.SetFileIndex(tree.RootPath, BuildFileIndexFromJournal(tree.RootPath, tree.Resolved.Primary))
+		w.updateIncludeEdgesLocked(tree.RootPath, nil, w.index.FileIndex(tree.RootPath).Includes)
 
-	w.index.SetFileIndex(w.rootJournalPath, BuildFileIndexFromJournal(w.rootJournalPath, w.resolved.Primary))
-	w.updateIncludeEdgesLocked(w.rootJournalPath, nil, w.index.FileIndex(w.rootJournalPath).Includes)
-
-	for path, journal := range w.resolved.Files {
-		w.index.SetFileIndex(path, BuildFileIndexFromJournal(path, journal))
-		w.updateIncludeEdgesLocked(path, nil, w.index.FileIndex(path).Includes)
+		for path, journal := range tree.Resolved.Files {
+			w.index.SetFileIndex(path, BuildFileIndexFromJournal(path, journal))
+			w.updateIncludeEdgesLocked(path, nil, w.index.FileIndex(path).Includes)
+		}
 	}
 }
 
-func (w *Workspace) updateResolvedLocked(path string, journal *ast.Journal) {
-	if w.resolved == nil {
-		w.resolved = include.NewResolvedJournal(nil)
+func (w *Workspace) updateResolvedForTreeLocked(tree *IncludeTree, path string, journal *ast.Journal) {
+	if tree.Resolved == nil {
+		tree.Resolved = include.NewResolvedJournal(nil)
 	}
-	if path == w.rootJournalPath {
-		w.resolved.Primary = journal
+	if path == tree.RootPath {
+		tree.Resolved.Primary = journal
 		return
 	}
 	if journal == nil {
-		delete(w.resolved.Files, path)
-		w.resolved.FileOrder = removeString(w.resolved.FileOrder, path)
+		delete(tree.Resolved.Files, path)
+		tree.Resolved.FileOrder = removeString(tree.Resolved.FileOrder, path)
 		return
 	}
-	w.resolved.Files[path] = journal
-	w.resolved.FileOrder = addString(w.resolved.FileOrder, path)
+	tree.Resolved.Files[path] = journal
+	tree.Resolved.FileOrder = addString(tree.Resolved.FileOrder, path)
 }
 
 func (w *Workspace) updateIncludeEdgesLocked(path string, oldIncludes, newIncludes []string) {
@@ -306,27 +373,27 @@ func (w *Workspace) updateIncludeEdgesLocked(path string, oldIncludes, newInclud
 	}
 }
 
-func (w *Workspace) refreshIncludeTreeLocked() {
-	if w.rootJournalPath == "" || w.index == nil {
+func (w *Workspace) refreshTreeLocked(tree *IncludeTree) {
+	if tree.RootPath == "" || w.index == nil {
 		return
 	}
 
 	for {
-		reachable := w.computeReachableLocked()
-		w.removeUnreachableLocked(reachable)
-		added := w.addMissingReachableLocked(reachable)
+		reachable := w.computeReachableFromLocked(tree.RootPath)
+		w.removeUnreachableFromTreeLocked(tree, reachable)
+		added := w.addMissingReachableToTreeLocked(tree, reachable)
 		if !added {
 			return
 		}
 	}
 }
 
-func (w *Workspace) computeReachableLocked() map[string]bool {
+func (w *Workspace) computeReachableFromLocked(rootPath string) map[string]bool {
 	reachable := make(map[string]bool)
-	if w.rootJournalPath == "" {
+	if rootPath == "" {
 		return reachable
 	}
-	queue := []string{w.rootJournalPath}
+	queue := []string{rootPath}
 	for len(queue) > 0 {
 		path := queue[0]
 		queue = queue[1:]
@@ -343,10 +410,11 @@ func (w *Workspace) computeReachableLocked() map[string]bool {
 	return reachable
 }
 
-func (w *Workspace) removeUnreachableLocked(reachable map[string]bool) {
+func (w *Workspace) removeUnreachableFromTreeLocked(tree *IncludeTree, reachable map[string]bool) {
+	// Only remove files that belong to this tree
 	var toRemove []string
-	for path := range w.index.fileIndexes {
-		if !reachable[path] {
+	for path, root := range w.fileTree {
+		if root == tree.RootPath && !reachable[path] && path != tree.RootPath {
 			toRemove = append(toRemove, path)
 		}
 	}
@@ -356,21 +424,54 @@ func (w *Workspace) removeUnreachableLocked(reachable map[string]bool) {
 			w.updateIncludeEdgesLocked(path, oldIndex.Includes, nil)
 		}
 		w.index.RemoveFile(path)
-		delete(w.includeGraph, path)
-		delete(w.reverseGraph, path)
-		if w.resolved != nil {
-			delete(w.resolved.Files, path)
-			w.resolved.FileOrder = removeString(w.resolved.FileOrder, path)
+		delete(w.fileTree, path)
+		if tree.Resolved != nil {
+			delete(tree.Resolved.Files, path)
+			tree.Resolved.FileOrder = removeString(tree.Resolved.FileOrder, path)
 		}
 	}
 }
 
-func (w *Workspace) addMissingReachableLocked(reachable map[string]bool) bool {
+func (w *Workspace) addMissingReachableToTreeLocked(tree *IncludeTree, reachable map[string]bool) bool {
 	added := false
 	for path := range reachable {
-		if w.index.FileIndex(path) != nil {
+		// Already in this tree
+		if w.fileTree[path] == tree.RootPath {
 			continue
 		}
+
+		// File is in another tree — move it
+		if oldRoot, ok := w.fileTree[path]; ok && oldRoot != tree.RootPath {
+			oldTree := w.trees[oldRoot]
+			if oldTree != nil {
+				// Get journal from old tree to add to new tree
+				var journal *ast.Journal
+				if path == oldTree.RootPath && oldTree.Resolved != nil {
+					journal = oldTree.Resolved.Primary
+				} else if oldTree.Resolved != nil {
+					journal = oldTree.Resolved.Files[path]
+				}
+				// Remove from old tree
+				if oldTree.Resolved != nil {
+					delete(oldTree.Resolved.Files, path)
+					oldTree.Resolved.FileOrder = removeString(oldTree.Resolved.FileOrder, path)
+					oldTree.clearCaches()
+				}
+				// If old tree was a standalone (only root, no files), remove it
+				if oldRoot == path {
+					delete(w.trees, oldRoot)
+				}
+				// Add to new tree
+				if journal != nil {
+					w.updateResolvedForTreeLocked(tree, path, journal)
+				}
+			}
+			w.fileTree[path] = tree.RootPath
+			added = true
+			continue
+		}
+
+		// File not in any tree — load from disk
 		content, err := os.ReadFile(path)
 		if err != nil {
 			continue
@@ -378,17 +479,18 @@ func (w *Workspace) addMissingReachableLocked(reachable map[string]bool) bool {
 		fileIndex, journal, _ := BuildFileIndexFromContent(path, normalizeLineEndings(string(content)))
 		w.index.SetFileIndex(path, fileIndex)
 		w.updateIncludeEdgesLocked(path, nil, fileIndex.Includes)
-		w.updateResolvedLocked(path, journal)
+		w.updateResolvedForTreeLocked(tree, path, journal)
+		w.fileTree[path] = tree.RootPath
 		added = true
 	}
 	if added {
-		w.clearCachesLocked()
+		tree.clearCaches()
 	}
 	return added
 }
 
 func (w *Workspace) isWorkspaceFileLocked(path string) bool {
-	if path == w.rootJournalPath {
+	if _, ok := w.fileTree[path]; ok {
 		return true
 	}
 	if w.index.FileIndex(path) != nil {
@@ -398,12 +500,6 @@ func (w *Workspace) isWorkspaceFileLocked(path string) bool {
 		return true
 	}
 	return false
-}
-
-func (w *Workspace) clearCachesLocked() {
-	w.cachedFormats = nil
-	w.cachedCommodities = nil
-	w.cachedAccounts = nil
 }
 
 func sameStringSlice(a, b []string) bool {
@@ -470,83 +566,140 @@ func (w *Workspace) GetIncludedBy(path string) []string {
 	return result
 }
 
-func (w *Workspace) GetCommodityFormats() map[string]formatter.CommodityFormat {
+// GetCommodityFormatsForFile returns commodity formats for the tree containing the given file.
+func (w *Workspace) GetCommodityFormatsForFile(path string) map[string]formatter.CommodityFormat {
 	w.mu.RLock()
-	if w.cachedFormats != nil {
+	rootPath := w.fileTree[path]
+	tree := w.trees[rootPath]
+	if tree == nil {
+		w.mu.RUnlock()
+		return nil
+	}
+	if tree.cachedFormats != nil {
 		defer w.mu.RUnlock()
-		return w.cachedFormats
+		return tree.cachedFormats
 	}
 	w.mu.RUnlock()
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if w.cachedFormats != nil {
-		return w.cachedFormats
+	tree = w.trees[rootPath]
+	if tree == nil {
+		return nil
 	}
-
-	if w.resolved == nil {
+	if tree.cachedFormats != nil {
+		return tree.cachedFormats
+	}
+	if tree.Resolved == nil {
 		return nil
 	}
 
-	w.cachedFormats = formatter.ExtractCommodityFormats(w.resolved.FormatDirectives())
-	return w.cachedFormats
+	tree.cachedFormats = formatter.ExtractCommodityFormats(tree.Resolved.FormatDirectives())
+	return tree.cachedFormats
 }
 
-func (w *Workspace) GetDeclaredCommodities() map[string]bool {
+// GetCommodityFormats returns commodity formats for the first tree (backward compatibility).
+func (w *Workspace) GetCommodityFormats() map[string]formatter.CommodityFormat {
+	root := w.RootJournalPath()
+	if root == "" {
+		return nil
+	}
+	return w.GetCommodityFormatsForFile(root)
+}
+
+// GetDeclaredCommoditiesForFile returns declared commodities for the tree containing the given file.
+func (w *Workspace) GetDeclaredCommoditiesForFile(path string) map[string]bool {
 	w.mu.RLock()
-	if w.cachedCommodities != nil {
+	rootPath := w.fileTree[path]
+	tree := w.trees[rootPath]
+	if tree == nil {
+		w.mu.RUnlock()
+		return nil
+	}
+	if tree.cachedCommodities != nil {
 		defer w.mu.RUnlock()
-		return w.cachedCommodities
+		return tree.cachedCommodities
 	}
 	w.mu.RUnlock()
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if w.cachedCommodities != nil {
-		return w.cachedCommodities
+	tree = w.trees[rootPath]
+	if tree == nil {
+		return nil
 	}
-
-	if w.resolved == nil {
+	if tree.cachedCommodities != nil {
+		return tree.cachedCommodities
+	}
+	if tree.Resolved == nil {
 		return nil
 	}
 
 	declared := make(map[string]bool)
-	for _, dir := range w.resolved.AllDirectives() {
+	for _, dir := range tree.Resolved.AllDirectives() {
 		if cd, ok := dir.(ast.CommodityDirective); ok {
 			declared[cd.Commodity.Symbol] = true
 		}
 	}
-	w.cachedCommodities = declared
+	tree.cachedCommodities = declared
 	return declared
 }
 
-func (w *Workspace) GetDeclaredAccounts() map[string]bool {
+// GetDeclaredCommodities returns declared commodities for the first tree (backward compatibility).
+func (w *Workspace) GetDeclaredCommodities() map[string]bool {
+	root := w.RootJournalPath()
+	if root == "" {
+		return nil
+	}
+	return w.GetDeclaredCommoditiesForFile(root)
+}
+
+// GetDeclaredAccountsForFile returns declared accounts for the tree containing the given file.
+func (w *Workspace) GetDeclaredAccountsForFile(path string) map[string]bool {
 	w.mu.RLock()
-	if w.cachedAccounts != nil {
+	rootPath := w.fileTree[path]
+	tree := w.trees[rootPath]
+	if tree == nil {
+		w.mu.RUnlock()
+		return nil
+	}
+	if tree.cachedAccounts != nil {
 		defer w.mu.RUnlock()
-		return w.cachedAccounts
+		return tree.cachedAccounts
 	}
 	w.mu.RUnlock()
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if w.cachedAccounts != nil {
-		return w.cachedAccounts
+	tree = w.trees[rootPath]
+	if tree == nil {
+		return nil
 	}
-
-	if w.resolved == nil {
+	if tree.cachedAccounts != nil {
+		return tree.cachedAccounts
+	}
+	if tree.Resolved == nil {
 		return nil
 	}
 
 	declared := make(map[string]bool)
-	for _, dir := range w.resolved.AllDirectives() {
+	for _, dir := range tree.Resolved.AllDirectives() {
 		if ad, ok := dir.(ast.AccountDirective); ok {
 			declared[ad.Account.Name] = true
 		}
 	}
-	w.cachedAccounts = declared
+	tree.cachedAccounts = declared
 	return declared
+}
+
+// GetDeclaredAccounts returns declared accounts for the first tree (backward compatibility).
+func (w *Workspace) GetDeclaredAccounts() map[string]bool {
+	root := w.RootJournalPath()
+	if root == "" {
+		return nil
+	}
+	return w.GetDeclaredAccountsForFile(root)
 }

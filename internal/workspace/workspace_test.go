@@ -387,7 +387,8 @@ func TestWorkspace_IndexSnapshot_IncludeChange(t *testing.T) {
 
 	snapshot := ws.IndexSnapshot()
 	assert.Contains(t, snapshot.Accounts.All, "expenses:food")
-	assert.NotContains(t, snapshot.Accounts.All, "expenses:travel")
+	// In multi-tree mode, two.journal is a standalone tree, so its accounts are visible
+	assert.Contains(t, snapshot.Accounts.All, "expenses:travel")
 
 	ws.UpdateFile(mainPath, "include one.journal\ninclude two.journal")
 	snapshot = ws.IndexSnapshot()
@@ -395,6 +396,7 @@ func TestWorkspace_IndexSnapshot_IncludeChange(t *testing.T) {
 
 	ws.UpdateFile(mainPath, "include two.journal")
 	snapshot = ws.IndexSnapshot()
+	// one.journal is no longer included by main and has no standalone tree
 	assert.NotContains(t, snapshot.Accounts.All, "expenses:food")
 }
 
@@ -963,6 +965,126 @@ func TestBuildIncludeGraph_CRLF(t *testing.T) {
 	require.NotNil(t, resolved)
 	allTx := resolved.AllTransactions()
 	assert.Len(t, allTx, 2, "should have transactions from both root and child")
+}
+
+func TestWorkspace_MultiTree_TwoIndependentRoots(t *testing.T) {
+	t.Setenv("LEDGER_FILE", "")
+	t.Setenv("HLEDGER_JOURNAL", "")
+
+	tmpDir := t.TempDir()
+
+	// Tree 1: personal.journal → personal-2025.journal
+	personalPath := filepath.Join(tmpDir, "personal.journal")
+	personalContent := "include personal-2025.journal\n\naccount assets:personal\n"
+	require.NoError(t, os.WriteFile(personalPath, []byte(personalContent), 0644))
+
+	personal2025Path := filepath.Join(tmpDir, "personal-2025.journal")
+	personal2025Content := "2025-01-01 Salary\n    assets:personal  $1000\n    income:salary\n"
+	require.NoError(t, os.WriteFile(personal2025Path, []byte(personal2025Content), 0644))
+
+	// Tree 2: business.journal → business-2025.journal
+	businessPath := filepath.Join(tmpDir, "business.journal")
+	businessContent := "include business-2025.journal\n\naccount assets:business\n"
+	require.NoError(t, os.WriteFile(businessPath, []byte(businessContent), 0644))
+
+	business2025Path := filepath.Join(tmpDir, "business-2025.journal")
+	business2025Content := "2025-01-01 Client payment\n    assets:business  $5000\n    income:consulting\n"
+	require.NoError(t, os.WriteFile(business2025Path, []byte(business2025Content), 0644))
+
+	ws := NewWorkspace(tmpDir, include.NewLoader())
+	require.NoError(t, ws.Initialize())
+
+	// personal.journal tree should have personal transactions
+	personalResolved := ws.GetResolvedForFile(personalPath)
+	require.NotNil(t, personalResolved)
+	personalTx := personalResolved.AllTransactions()
+	require.Len(t, personalTx, 1)
+	assert.Equal(t, "Salary", personalTx[0].Description)
+
+	// business.journal tree should have business transactions
+	businessResolved := ws.GetResolvedForFile(businessPath)
+	require.NotNil(t, businessResolved)
+	businessTx := businessResolved.AllTransactions()
+	require.Len(t, businessTx, 1)
+	assert.Equal(t, "Client payment", businessTx[0].Description)
+
+	// Child files should resolve to their parent's tree
+	personal2025Resolved := ws.GetResolvedForFile(personal2025Path)
+	require.NotNil(t, personal2025Resolved)
+	assert.Equal(t, personalResolved, personal2025Resolved)
+
+	business2025Resolved := ws.GetResolvedForFile(business2025Path)
+	require.NotNil(t, business2025Resolved)
+	assert.Equal(t, businessResolved, business2025Resolved)
+
+	// Trees should be isolated — different resolved objects
+	assert.NotEqual(t, personalResolved, businessResolved)
+}
+
+func TestWorkspace_MultiTree_Standalone(t *testing.T) {
+	t.Setenv("LEDGER_FILE", "")
+	t.Setenv("HLEDGER_JOURNAL", "")
+
+	tmpDir := t.TempDir()
+
+	// Standalone file — no includes, not included by anyone
+	standalonePath := filepath.Join(tmpDir, "standalone.journal")
+	standaloneContent := "2025-01-01 Solo\n    expenses:food  $10\n    assets:cash\n"
+	require.NoError(t, os.WriteFile(standalonePath, []byte(standaloneContent), 0644))
+
+	ws := NewWorkspace(tmpDir, include.NewLoader())
+	require.NoError(t, ws.Initialize())
+
+	resolved := ws.GetResolvedForFile(standalonePath)
+	require.NotNil(t, resolved)
+	allTx := resolved.AllTransactions()
+	require.Len(t, allTx, 1)
+	assert.Equal(t, "Solo", allTx[0].Description)
+}
+
+func TestWorkspace_MultiTree_SingleRoot(t *testing.T) {
+	t.Setenv("LEDGER_FILE", "")
+	t.Setenv("HLEDGER_JOURNAL", "")
+
+	tmpDir := t.TempDir()
+
+	mainPath := filepath.Join(tmpDir, "main.journal")
+	mainContent := "include child.journal\n\n2024-01-01 Main\n    expenses:food  $10\n    assets:cash\n"
+	require.NoError(t, os.WriteFile(mainPath, []byte(mainContent), 0644))
+
+	childPath := filepath.Join(tmpDir, "child.journal")
+	childContent := "2024-01-02 Child\n    expenses:rent  $100\n    assets:bank\n"
+	require.NoError(t, os.WriteFile(childPath, []byte(childContent), 0644))
+
+	ws := NewWorkspace(tmpDir, include.NewLoader())
+	require.NoError(t, ws.Initialize())
+
+	// Both files should resolve to the same tree
+	mainResolved := ws.GetResolvedForFile(mainPath)
+	require.NotNil(t, mainResolved)
+	childResolved := ws.GetResolvedForFile(childPath)
+	require.NotNil(t, childResolved)
+	assert.Equal(t, mainResolved, childResolved)
+
+	// Should contain both transactions
+	allTx := mainResolved.AllTransactions()
+	assert.Len(t, allTx, 2)
+}
+
+func TestWorkspace_GetResolvedForFile_UnknownFile(t *testing.T) {
+	t.Setenv("LEDGER_FILE", "")
+	t.Setenv("HLEDGER_JOURNAL", "")
+
+	tmpDir := t.TempDir()
+
+	mainPath := filepath.Join(tmpDir, "main.journal")
+	require.NoError(t, os.WriteFile(mainPath, []byte(""), 0644))
+
+	ws := NewWorkspace(tmpDir, include.NewLoader())
+	require.NoError(t, ws.Initialize())
+
+	resolved := ws.GetResolvedForFile("/nonexistent/file.journal")
+	assert.Nil(t, resolved)
 }
 
 func TestWorkspace_AddMissingReachable_CRLF(t *testing.T) {
