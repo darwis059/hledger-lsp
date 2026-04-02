@@ -315,9 +315,12 @@ func (s *Server) publishDiagnostics(ctx context.Context, docURI protocol.Documen
 	diagnostics := s.analyze(path, content)
 
 	for _, err := range loadErrors {
-		severity := protocol.DiagnosticSeverityError
 		if err.Kind == include.ErrorParseError {
 			continue
+		}
+		severity := protocol.DiagnosticSeverityError
+		if err.Kind == include.ErrorNotJournal {
+			severity = protocol.DiagnosticSeverityWarning
 		}
 		diagnostics = append(diagnostics, protocol.Diagnostic{
 			Range:    *astRangeToProtocol(err.Range),

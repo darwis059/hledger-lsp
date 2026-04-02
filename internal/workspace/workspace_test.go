@@ -1122,3 +1122,38 @@ func TestWorkspace_AddMissingReachable_CRLF(t *testing.T) {
 		"child file accounts should be available (CRLF must be normalized)")
 	assert.Contains(t, snapshot.Accounts.All, "assets:bank")
 }
+
+func TestWorkspace_UpdateFile_SkipsNonJournal(t *testing.T) {
+	t.Setenv("LEDGER_FILE", "")
+	t.Setenv("HLEDGER_JOURNAL", "")
+
+	tmpDir := t.TempDir()
+
+	mainPath := filepath.Join(tmpDir, "main.journal")
+	mainContent := `include bank.rules
+
+2024-01-01 Test
+    expenses:food  $10
+    assets:cash
+`
+	require.NoError(t, os.WriteFile(mainPath, []byte(mainContent), 0644))
+
+	rulesPath := filepath.Join(tmpDir, "bank.rules")
+	rulesContent := `source data.csv
+skip 1
+fields date,description,amount
+`
+	require.NoError(t, os.WriteFile(rulesPath, []byte(rulesContent), 0644))
+
+	loader := include.NewLoader()
+	ws := NewWorkspace(tmpDir, loader)
+	require.NoError(t, ws.Initialize())
+
+	// UpdateFile on .rules path should not panic and should return early
+	ws.UpdateFile(rulesPath, rulesContent)
+
+	// Main journal data should still be intact
+	snapshot := ws.IndexSnapshot()
+	assert.Contains(t, snapshot.Accounts.All, "expenses:food")
+	assert.Contains(t, snapshot.Accounts.All, "assets:cash")
+}

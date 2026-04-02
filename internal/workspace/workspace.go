@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/juev/hledger-lsp/internal/ast"
+	"github.com/juev/hledger-lsp/internal/filetype"
 	"github.com/juev/hledger-lsp/internal/formatter"
 	"github.com/juev/hledger-lsp/internal/include"
 	"github.com/juev/hledger-lsp/internal/parser"
@@ -290,7 +291,7 @@ func (w *Workspace) IndexSnapshot() IndexSnapshot {
 }
 
 func (w *Workspace) UpdateFile(path, content string) {
-	if path == "" {
+	if path == "" || !filetype.IsJournalPath(path) {
 		return
 	}
 	w.mu.Lock()

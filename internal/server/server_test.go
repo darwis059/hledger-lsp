@@ -1476,6 +1476,39 @@ func TestServer_RulesDiagnostics_PositionConversion(t *testing.T) {
 	assert.Equal(t, uint32(0), found.Range.Start.Character, "Start.Character must be 0-based")
 }
 
+func TestServer_RulesSourceDirective_NoDiagnostics(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///test.rules")
+
+	content := "source data.csv\nskip 1\nfields date,description,amount"
+	diags, err := ts.openAndWait(uri, content)
+	require.NoError(t, err)
+
+	// No diagnostics expected for a valid rules file with source directive
+	for _, d := range diags {
+		if strings.Contains(d.Message, "unexpected content") {
+			t.Errorf("unexpected journal parser error in rules file: %s", d.Message)
+		}
+	}
+	assert.Empty(t, diags, "valid rules file with source directive should have no diagnostics")
+}
+
+func TestServer_RulesIncludeDirective_NoDiagnostics(t *testing.T) {
+	ts := newTestServer()
+	uri := protocol.DocumentURI("file:///test.rules")
+
+	content := "include common.rules\nskip 1\nfields date,description,amount"
+	diags, err := ts.openAndWait(uri, content)
+	require.NoError(t, err)
+
+	for _, d := range diags {
+		if strings.Contains(d.Message, "unexpected content") {
+			t.Errorf("unexpected journal parser error in rules file: %s", d.Message)
+		}
+	}
+	assert.Empty(t, diags, "valid rules file with include directive should have no diagnostics")
+}
+
 func TestInitialize_RootURIParsing(t *testing.T) {
 	tests := []struct {
 		name     string

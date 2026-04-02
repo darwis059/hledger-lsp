@@ -11,6 +11,7 @@ const (
 	ErrorReadError
 	ErrorFileTooLarge
 	ErrorPathTraversal
+	ErrorNotJournal
 )
 
 type LoadError struct {

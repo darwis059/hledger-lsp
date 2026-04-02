@@ -13,6 +13,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 
 	"github.com/juev/hledger-lsp/internal/ast"
+	"github.com/juev/hledger-lsp/internal/filetype"
 	"github.com/juev/hledger-lsp/internal/parser"
 )
 
@@ -206,6 +207,16 @@ func (l *Loader) loadSingleInclude(
 			Kind:    ErrorCycleDetected,
 			Path:    includePath,
 			Message: fmt.Sprintf("cycle detected: %s includes %s", basePath, includePath),
+			Range:   incRange,
+		})
+		return errors
+	}
+
+	if !filetype.IsJournalPath(includePath) {
+		errors = append(errors, LoadError{
+			Kind:    ErrorNotJournal,
+			Path:    includePath,
+			Message: fmt.Sprintf("included file is not a journal file: %s", filepath.Base(includePath)),
 			Range:   incRange,
 		})
 		return errors

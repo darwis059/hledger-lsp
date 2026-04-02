@@ -1,7 +1,10 @@
 // Package filetype detects hledger file types from URI extensions.
 package filetype
 
-import "strings"
+import (
+	"path/filepath"
+	"strings"
+)
 
 type FileType int
 
@@ -47,3 +50,14 @@ func IsJournal(uri string) bool { return Detect(uri) == Journal }
 
 // IsRules reports whether the URI refers to an hledger rules file.
 func IsRules(uri string) bool { return Detect(uri) == Rules }
+
+// IsJournalPath reports whether a filesystem path has a journal file extension.
+func IsJournalPath(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".journal", ".hledger", ".j", ".ledger":
+		return true
+	default:
+		return false
+	}
+}

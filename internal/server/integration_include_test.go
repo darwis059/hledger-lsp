@@ -585,3 +585,49 @@ func TestIntegration_Issue18_GlobIncludeWithSubdirectory(t *testing.T) {
 	assert.Contains(t, hoverContent, "115.10", "balance should include all postings from both files")
 	assert.Contains(t, hoverContent, "Postings:** 8", "should count all 8 postings across both files")
 }
+
+func TestIntegration_JournalIncludesRulesFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	rulesContent := `source data.csv
+skip 1
+fields date,description,amount
+`
+	mainContent := `include bank.rules
+
+2024-01-15 grocery store
+    expenses:food  $50.00
+    assets:cash
+`
+	rulesPath := filepath.Join(tmpDir, "bank.rules")
+	mainPath := filepath.Join(tmpDir, "main.journal")
+
+	require.NoError(t, os.WriteFile(rulesPath, []byte(rulesContent), 0644))
+	require.NoError(t, os.WriteFile(mainPath, []byte(mainContent), 0644))
+
+	ts := newTestServer()
+	uri := protocol.DocumentURI(fmt.Sprintf("file://%s", mainPath))
+
+	diags, err := ts.openAndWait(uri, mainContent)
+	require.NoError(t, err)
+
+	// Should NOT have "unexpected content" errors from journal parser
+	for _, d := range diags {
+		if strings.Contains(d.Message, "unexpected content") {
+			t.Errorf("unexpected journal parser error for included rules file: %s", d.Message)
+		}
+	}
+
+	// Should have one warning about non-journal include
+	var warnings []protocol.Diagnostic
+	for _, d := range diags {
+		if d.Severity == protocol.DiagnosticSeverityWarning &&
+			strings.Contains(d.Message, "not a journal file") {
+			warnings = append(warnings, d)
+		}
+	}
+	assert.Len(t, warnings, 1, "expected one warning about non-journal include")
+	if len(warnings) > 0 {
+		assert.Contains(t, warnings[0].Message, "bank.rules")
+	}
+}

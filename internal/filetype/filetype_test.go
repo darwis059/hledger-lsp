@@ -51,6 +51,33 @@ func TestIsRules(t *testing.T) {
 	}
 }
 
+func TestIsJournalPath(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"/home/user/main.journal", true},
+		{"/home/user/main.hledger", true},
+		{"/home/user/main.j", true},
+		{"/home/user/main.ledger", true},
+		{"/home/user/main.JOURNAL", true},
+		{"/home/user/main.Journal", true},
+		{"/home/user/bank.rules", false},
+		{"/home/user/data.csv", false},
+		{"/home/user/notes.txt", false},
+		{"/home/user/noext", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			got := filetype.IsJournalPath(tt.path)
+			if got != tt.want {
+				t.Errorf("IsJournalPath(%q) = %v, want %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestFileType_String(t *testing.T) {
 	tests := []struct {
 		ft   filetype.FileType

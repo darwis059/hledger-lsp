@@ -559,3 +559,64 @@ func TestLoader_MaxIncludeDepthLimit(t *testing.T) {
 		t.Fatalf("expected include depth limit error, got: %v", errs)
 	}
 }
+
+func TestLoader_IncludeNonJournalFile(t *testing.T) {
+	dir := t.TempDir()
+	mainFile := filepath.Join(dir, "main.journal")
+	rulesFile := filepath.Join(dir, "bank.rules")
+
+	mainContent := `include bank.rules
+
+2024-01-15 * grocery store
+    expenses:food  $50.00
+    assets:cash
+`
+	rulesContent := `source data.csv
+skip 1
+fields date,description,amount
+`
+	if err := os.WriteFile(mainFile, []byte(mainContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(rulesFile, []byte(rulesContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	loader := NewLoader()
+	result, errs := loader.Load(mainFile)
+
+	if result == nil {
+		t.Fatal("result is nil")
+	}
+
+	// .rules file should NOT be in resolved files
+	if _, ok := result.Files[rulesFile]; ok {
+		t.Error("rules file should not be in ResolvedJournal.Files")
+	}
+
+	// Should have no parse errors
+	for _, e := range errs {
+		if e.Kind == ErrorParseError {
+			t.Errorf("unexpected parse error: %s", e.Message)
+		}
+	}
+
+	// Should have one ErrorNotJournal warning
+	var notJournalErrors []LoadError
+	for _, e := range errs {
+		if e.Kind == ErrorNotJournal {
+			notJournalErrors = append(notJournalErrors, e)
+		}
+	}
+	if len(notJournalErrors) != 1 {
+		t.Fatalf("expected 1 ErrorNotJournal, got %d: %v", len(notJournalErrors), errs)
+	}
+	if !strings.Contains(notJournalErrors[0].Message, "not a journal file") {
+		t.Errorf("expected 'not a journal file' message, got: %s", notJournalErrors[0].Message)
+	}
+
+	// Main file transactions should still be parsed
+	if len(result.Primary.Transactions) != 1 {
+		t.Errorf("expected 1 transaction, got %d", len(result.Primary.Transactions))
+	}
+}
