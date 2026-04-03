@@ -18,10 +18,11 @@ jobs:
         with:
           go-version: "1.24"
 
-      - uses: goreleaser/goreleaser-action@v6
+      - name: Build
+        run: go build -v -o hledger-lsp.exe ./cmd/hledger-lsp
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
         with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: hledger-lsp  # Name of the artifact (default: 'artifact')
+          path: hledger-lsp.exe # File, directory, or wildcard pattern
